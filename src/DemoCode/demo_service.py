@@ -9,7 +9,7 @@
 """
 import time
 from textual.widget import Widget
-from utils.config import EgeriaConfig, get_global_config
+from .config import EgeriaConfig, get_global_config
 from pyegeria import EgeriaTech
 
 
@@ -21,7 +21,7 @@ class DemoService(Widget):
         self.client = None
 
 
-    def access_egeria(self):
+    def _access_egeria(self) -> bool:
         # put in a timer and every 15 minutes (900 seconds) refresh the token.
 
         try:
@@ -72,6 +72,6 @@ class DemoService(Widget):
             self._token_expired()
             return self._client.get_collection_list()
         else:
-            self.access_egeria()
+            self._access_egeria()
             return self._client.get_collection_list()
 

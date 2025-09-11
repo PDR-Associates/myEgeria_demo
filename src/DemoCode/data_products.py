@@ -10,13 +10,10 @@
 import os
 
 from textual.app import App
-from textual.widgets import Button
 
-from ..screens.splash_screen import SplashScreen
-from ..screens.login_screen import LoginScreen
+from splash_screen import SplashScreen
+from login_screen import LoginScreen
 from data_product_screen import DataProductScreen
-from utils.config import EgeriaConfig
-from demo_service import DemoService
 
 class DataProducts(App):
 

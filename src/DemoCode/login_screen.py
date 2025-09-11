@@ -9,11 +9,14 @@ This module provides services for the Screen related functions of my_egeria modu
 """
 
 import os
+import asyncio
 from textual.containers import Container, Vertical
 from textual.message import Message
+from textual.screen import Screen
 from textual.widgets import Static, Input, Button
-from .base_screen import BaseScreen
-from ..con_services.egeria_connection import connect_to_egeria
+from base_screen import BaseScreen
+from demo_service import DemoService
+
 
 
 class LoginScreen(BaseScreen):
@@ -138,7 +141,9 @@ class LoginScreen(BaseScreen):
         ok = False
         try:
             # Run blocking work off the UI thread, with a timeout for safety
-            ok = connect_to_egeria,
+            if not DemoService._access_egeria():
+                ok = False
+                status.update(f"Egeria connection error")
         except Exception as e:
             ok = False
             status.update(f"Error: {e}")

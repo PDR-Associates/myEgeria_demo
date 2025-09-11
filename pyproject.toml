@@ -20,12 +20,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
  ]
 packages = [
-    { include = "src/my_egeria"},
-    { include = "src/my_egeria/screens"},
-    { include = "src/my_egeria/services"},
-    { include = "src/my_egeria/widgets"},
-    { include = "src/my_egeria/styles"},
-    { include = "src/my_egeria/utils"},
+    { include = "src"},
+    { include = "src/con_services"},
+    { include = "src/DemoCode"},
+    { include = "src/screens"},
+    { include = "src/services"},
+    { include = "src/widgets"},
+    { include = "src/styles"},
+    { include = "src/utils"},
 
     ]
 
@@ -52,7 +54,7 @@ pydantic-settings = "^2.10.1"
 pydevd-pycharm = "*"
 pyegeria = "==5.4.4"
 textual-dev = "==1.7.0"
-textual-pax = "==0.1.96"
+textual-web = "*"
 
 
 [build-system]
@@ -74,3 +76,4 @@ isort = "^6.0.0"
 
 [tool.poetry.scripts]
     my_egeria = "src.main:main"
+    data_products = "src.DemoCode:main"
