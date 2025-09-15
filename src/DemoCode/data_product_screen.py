@@ -14,7 +14,7 @@ from textual.message import Message
 from textual.screen import Screen
 from textual.widget import Widget
 from textual.widgets import Static, Button, DataTable, Header, Footer
-from pyegeria import EgeriaTech
+from pyegeria import EgeriaTech, CollectionManager
 
 
 class DataProductScreen(Screen):
@@ -93,7 +93,7 @@ class DataProductScreen(Screen):
         # Create a textual DataTable to hold the data received from Egeria
         self.collection_list: DataTable = DataTable(id="collection_list")
         # Add columns to the DataTable
-        self.collection_list.add_columns("Data Product Name", "GUID", "Type Name")
+        self.collection_list.add_columns("GUID", "Display Name", "Qualified Name", "Description")
         # Set up the Egeria Client
         self.log(f"Connecting to Egeria using: , {Egeria_config}")
         collections = self.get_collections_from_egeria(Egeria_config=Egeria_config, Search_str = "*")
@@ -112,42 +112,43 @@ class DataProductScreen(Screen):
         self.log(f"Connecting to Egeria using: , {self.user}")
         self.log(f"Connecting to Egeria using: , {self.password}")
         try:
-            c_client = EgeriaTech(
-                view_server=self.view_server,
-                platform_url=self.platform_url,
-                user_id=self.user,
-                user_pwd=self.password
-            )
-            # Create bearer token for secure access to the Egeria view services
-            token = c_client.create_egeria_bearer_token(Egeria_config[2], Egeria_config[3])
-            # Retrieve the list of collections from Egeria
-            collections: dict = c_client.find_collections(search=Search_str, output_format="dict")
+            c_client = CollectionManager(self.view_server, self.platform_url, user_id=self.user,)
+            c_client.create_egeria_bearer_token(self.user, self.password)
+            response = c_client.find_collections(search=Search_str, output_format="dict")
             # Close the Egeria Client to save resources
             c_client.close_session()
+            for entry in response:
+                if "DigProdCatalog" in entry["properties"]["qualifiedName"]:
+                    self.collections[entry] = entry
+                else:
+                    continue
         except Exception as e:
             self.log(f"Error connecting to Egeria: {str(e)}")
-            collections:dict = {"Egeria Error": str(e)}
-        self.post_message(self.EgeriaDataReceived(collections))
+            self.collections:dict = {"Egeria Error": str(e)}
+        self.post_message(self.EgeriaDataReceived(self.collections))
 
     async def update_collection_list(collections: dict):
         collection_list: DataTable = DataTable(id="collection_list")
         try:
             DataProductScreen.collections = collections
             collection_list.clear(columns=False)
-            collection_list.add_rows(
-                (entry["name"], entry["guid"], entry["type_name"])
-                for entry in collections.values()
-            )
+            for entry in collections.values():
+                collection_list.add_row(
+                    (
+                     entry["GUID"],
+                     entry["properties"]["displayName"],
+                     entry["properties"]["qualifiedName"],
+                     entry["properties"]["description"],
+                    )
+
+                )
         except Exception as e:
             collection_list.add_row("Error", str(e))
             log(f"Error updating collection list: {str(e)}")
         return collection_list
 
     def compose(self) -> ComposeResult:
-        # cfg = get_config()
-        # self.view_server = cfg[1]
-        # self.platform_url = cfg[0]
-        # self.user = cfg[2]
+
         self.view_server = "qs-view-server"
         self.platform_url = "https://127.0.0.1:9443"
         self.user = "erinoverview"
@@ -165,7 +166,7 @@ class DataProductScreen(Screen):
             id = "title_row",
         )
         yield ScrollableContainer(
-            Static(f"AvailableData Product Marketplaces:"),
+            Static(f"Available Data Product Marketplaces:"),
             self.Collection_Datatable(),
             id="main_content")
         yield Container(
@@ -177,9 +178,10 @@ class DataProductScreen(Screen):
     def on_collection_list_row_selected(self, event: DataTable.RowSelected):
         self.collection_list = self.query_one("#collection_list", DataTable)
         self_row_selected = self.collection_list.get_row(event.row_key)
-        self.selected_guid = self_row_selected[1] or ""
-        self.selected_name = self_row_selected[0] or ""
-        self.selected_type = self_row_selected[2] or ""
+        self.selected_guid = self_row_selected[0] or ""
+        self.selected_name = self_row_selected[1] or ""
+        self.selected_qname = self_row_selected[2] or ""
+        self.selected_desc = self_row_selected[3] or ""
         self.log(f"Selected Data Product: {self.selected_name}")
         self.coll =  self.get_collections_from_egeria(Egeria_config=self.Egeria_config, Search_str = self.selected_guid)
         self.collections=self.coll
