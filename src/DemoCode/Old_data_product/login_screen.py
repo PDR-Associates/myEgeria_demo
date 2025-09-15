@@ -9,46 +9,65 @@ This module provides services for the Screen related functions of my_egeria modu
 """
 
 import os
-import asyncio
-from textual.containers import Container, Vertical
+
+from textual import on
+from textual.app import ComposeResult
+from textual.containers import Container, Vertical, Horizontal
 from textual.message import Message
-from textual.screen import Screen
 from textual.widgets import Static, Input, Button
 from base_screen import BaseScreen
 from demo_service import DemoService
-
+from typing import Optional
 
 
 class LoginScreen(BaseScreen):
     """User log in screen, automatically displayed following the package splash screen."""
 
-    CSS_PATH = ["../styles/common.css", "../styles/login_screen.css"]
 
     class LoginSuccess(Message):
-        def __init__(self, login_payload: list):
-            self.payload = login_payload
+        """ Message to indicate successful login """
+        def __init__(self):
             super().__init__()
+
+
+    class QuitRequested(Message):
+        """ Message to terminate application gracefully """
+        def __init__(self, return_code:Optional[int]=0):
+            self.return_code = return_code
+            super().__init__()
+
 
     def __init__(self):
         super().__init__()
         self.login_payload: list = []
 
-    def compose(self):
+    def compose(self) -> ComposeResult:
         yield from super().compose()
         # Top-half container holds a bordered box with the form, centered horizontally
         yield Container(
             Container(
                 Vertical(
                     Static("Login to Egeria", id="login_title"),
-                    Static("Username"),
-                    Input(placeholder="erinoverview", id="username"),
-                    Static("Password"),
-                    Input(placeholder="secret", password=True, id="password"),
-                    Static("Platform URL (optional)"),
-                    Input(placeholder="https://localhost:9443", id="platform-url"),
-                    Static("View Server (optional)"),
-                    Input(placeholder="qs-view-server", id="view-server"),
-                    Button(label="Login", id="login_button"),
+                    Horizontal(
+                        Static("Username"),
+                        Input(placeholder="erinoverview", id="username"),
+                        ),
+                    Horizontal(
+                        Static("Password"),
+                        Input(placeholder="secret", password=True, id="password"),
+                        ),
+                    Horizontal(
+                        Static("Platform URL (optional)"),
+                        Input(placeholder="https://localhost:9443", id="platform-url"),
+                        ),
+                    Horizontal(
+                        Static("View Server (optional)"),
+                        Input(placeholder="qs-view-server", id="view-server"),
+                        ),
+                    Horizontal(
+                        Button(label="Login", variant="success", id="login_button"),
+                        Button(label="Quit", variant="warning", id="quit"),
+                    ),
                     Static("", id="login_status"),
                     id="login_form",
                 ),
@@ -77,7 +96,7 @@ class LoginScreen(BaseScreen):
         box.styles.align_horizontal = "center"
         box.styles.align_vertical = "top"
         # Ensure the box is tall enough to show the button
-        box.styles.min_height = 14              # numeric rows to guarantee interior content fits
+        box.styles.min_height = 20              # numeric rows to guarantee interior content fits
 
         form = self.query_one("#login_form", Vertical)
         form.styles.gap = 1
@@ -97,6 +116,8 @@ class LoginScreen(BaseScreen):
         # Login button: small top margin (numeric)
         btn = self.query_one("#login_button", Button)
         btn.styles.margin = (1, 0, 0, 0)
+        btn = self.query_one("#quit", Button)
+        btn.styles.margin = (1, 0, 0, 0)
 
         # Defaults into the inputs
         self.query_one("#username", Input).value = os.getenv("EGERIA_USER", "erinoverview")
@@ -107,16 +128,17 @@ class LoginScreen(BaseScreen):
         # Focus username for convenience
         self.query_one("#username", Input).focus()
 
-    async def on_button_pressed(self, event: Button.Pressed):
-        if event.button.id != "login_button":
-            return
-
+    @on(Button.Pressed, "#login_button")
+    async def handle_login(self):
+        """ Process the login button press."""
+        self.log(f"Login Button pressed handler invoked")
+        # retrieve user input from screen input fields
         username = self.query_one("#username", Input).value.strip()
         password = self.query_one("#password", Input).value.strip()
         platform_url = self.query_one("#platform-url", Input).value.strip()
         view_server = self.query_one("#view-server", Input).value.strip()
-
-        # Fill defaults correctly
+        self.log(f"User input: {username}, {password}, {platform_url}, {view_server}")
+        # Fill defaults correctly for those values not entered by user
         if not username:
             username = "erinoverview"
         if not password:
@@ -125,34 +147,25 @@ class LoginScreen(BaseScreen):
             platform_url = "https://localhost:9443"
         if not view_server:
             view_server = "qs-view-server"
-
-        status = self.query_one("#login_status", Static)
-        btn = self.query_one("#login_button", Button)
-
+        # status = self.query_one("#login_status", Static)
+        # build payload for the message
         self.login_payload: list = [username,
                                password,
                                platform_url,
                                view_server
                                ]
         self.log(f"Payload created: {self.login_payload}")
-        # Disable button and show status while working
-        btn.disabled = True
-        # status.update("Connecting...")
-        ok = False
-        try:
-            # Run blocking work off the UI thread, with a timeout for safety
-            if not DemoService._access_egeria():
-                ok = False
-                status.update(f"Egeria connection error")
-        except Exception as e:
-            ok = False
-            status.update(f"Error: {e}")
-        finally:
-            btn.disabled = False
 
-        if ok:
-            status.update("Connected.")
-            self.post_message(LoginScreen.LoginSuccess(self.login_payload))
+        egeria_result = DemoService.egeria_login(self, payload=self.login_payload)
+        self.log(f"Egeria connection return: {egeria_result}")
+        if egeria_result:
+            self.log("Egeria connection successful")
+            self.app.post_message(self.LoginSuccess())
         else:
-            if not status.render:
-                status.update("Login failed.")
+            self.log("Egeria connection failed")
+            self.app.post_message(self.QuitRequested(400))
+
+    @on(Button.Pressed, "#quit")
+    async def handle_quit(self) -> None:
+        """Signal the application to Quit gracefully """
+        self.app.post_message(self.QuitRequested(200))

@@ -10,12 +10,11 @@ This module provides services for the Screen related functions of my_egeria modu
 
 from textual.containers import Container
 from textual.message import Message
-from textual.screen import Screen
-from textual.widgets import Label, Button, TextArea, Header, Static, Footer
+from textual.widgets import Label, Button, TextArea
 from textual import on
-from demo_service import get_config
+from base_screen import BaseScreen
 
-class SplashScreen(Screen):
+class SplashScreen(BaseScreen):
     """Splash screen with inline styles (no TCSS)."""
 
     class SplashContinue(Message):
@@ -44,12 +43,7 @@ class SplashScreen(Screen):
         )
 
     def compose(self):
-        cfg = get_config()
-        self.view_server=cfg[1]
-        self.platform_url=cfg[0]
-        self.user = cfg[2]
-        self.password = cfg[3]
-
+        yield from super().compose()
         top = Container(
             Label(
                 f"Welcome to {self.app_title} v{self.app_version} "
@@ -67,22 +61,10 @@ class SplashScreen(Screen):
             Button("Continue", variant="primary", id="continue"),
             id="splash_top",
         )
-        yield Header(show_clock=True)
-        yield Container(
-            Static(
-                f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}",
-                id="connection_info",
-            )
-        )
-        yield Container(
-            Static("MyEgeria", id="title"),
-            Static("Data Products", id="main_menu"),
-            id="title_row",
-        )
         yield top
-        yield Footer()
 
     async def on_mount(self):
+        await super().on_mount()
 
         # Place content in top half, center horizontally
         top = self.query_one("#splash_top", Container)
@@ -130,4 +112,4 @@ class SplashScreen(Screen):
 
     @on(Button.Pressed, "#continue")
     async def continue_to_app(self) -> None:
-        self.app.post_message(self.SplashContinue())
+        self.post_message(self.SplashContinue())

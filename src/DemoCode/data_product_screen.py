@@ -7,50 +7,158 @@
 
 
 """
-from textual import on
+from textual import on, log
 from textual.app import ComposeResult
 from textual.containers import Container, ScrollableContainer
 from textual.message import Message
 from textual.screen import Screen
-from textual.widgets import Static, Button, DataTable
-
-from utils.config import EgeriaConfig
-from demo_service import DemoService
+from textual.widget import Widget
+from textual.widgets import Static, Button, DataTable, Header, Footer
+from pyegeria import EgeriaTech
 
 
 class DataProductScreen(Screen):
     """Main menu for the Data Product functions of my_egeria"""
 
     BINDINGS = [
-        ("r", "refresh", "Refresh"),
-        ("q", "back", "Back"),
-        ("escape", "back", "Back"),
-    ]
+        ("q", "quit", "Quit"),
+        ]
+
+    CSS = """
+    .connection_info {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+        height: 1fr;
+        width: 1fr;
+    }
+    .title_row {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+         height: 1fr;
+         width: 1fr;
+    }
+    .main_content {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+        height: 5fr;
+        width: 1fr;
+    }
+    .action_row {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+        height: 1fr;
+        width: 1fr;
+    }       
+    """
 
     class QuitRequested(Message):
         """ Message to terminate application gracefully """
         def __init__(self):
             super().__init__()
+            self.collection_list = DataTable(id="collection_list")
 
-    def __init__(self, config: EgeriaConfig):
+    class TableCreated(Message):
+        def __init__(self, table: DataTable):
+            super().__init__()
+            self.table = table
+
+    class EgeriaDataReceived(Message):
+        def __init__(self, data: dict):
+            super().__init__()
+            self.data = data
+
+    def __init__(self):
+        self.Egeria_config = ["https://127.0.0.1:9443", "qs-view-server", "erinoverview", "secret"]
+        self.collections: dict = {}
         super().__init__()
-        self.config = config
 
-    def on_mount(self) -> None:
-        """ Call find collections service to create Data Product table"""
-        self.dataproductlist: dict = DemoService()._find_collections()
-        self.collection_list: DataTable = DataTable(id = "collection_list")
+    def Collection_Datatable(self) -> Widget:
+        """Collection_Datatable class, this widget creates the data table for the collections
+            and has message handlers for when a table row is selected.
+            and when the user requests to quit the application"""
+        platform_url= "https://127.0.0.1:9443"
+        view_server = "qs-view-server"
+        user = "erinoverview"
+        password = "secret"
+        # Create a list containing the Egeria configuration settings
+        Egeria_config: list = [platform_url,
+                               view_server,
+                               user,
+                               password,
+                               ]
+        # Create a textual DataTable to hold the data received from Egeria
+        self.collection_list: DataTable = DataTable(id="collection_list")
+        # Add columns to the DataTable
         self.collection_list.add_columns("Data Product Name", "GUID", "Type Name")
-        if not self.dataproductlist:
-            self.collection_list.add_row("No Data Products Found", "", "")
-            return
-        else:
-            for entry in self.dataproductlist:
-                self.collection_list.add_row(entry.get("name"), entry.get("guid"), entry.get("typeName"))
-                return
+        # Set up the Egeria Client
+        self.log(f"Connecting to Egeria using: , {Egeria_config}")
+        collections = self.get_collections_from_egeria(Egeria_config=Egeria_config, Search_str = "*")
+        # self.log(f"Update the DataTable")
+        # self.update_collection_list(collections=collections)
+        return self.collection_list
 
+    async def get_collections_from_egeria(self, Egeria_config: list, Search_str: str) -> dict:
+        self.log(f"Creating client and Connecting to Egeria using: , {Egeria_config}")
+        self.platform_url = Egeria_config[0]
+        self.view_server = Egeria_config[1]
+        self.user = Egeria_config[2]
+        self.password = Egeria_config[3]
+        self.log(f"Connecting to Egeria using: , {self.platform_url}")
+        self.log(f"Connecting to Egeria using: , {self.view_server}")
+        self.log(f"Connecting to Egeria using: , {self.user}")
+        self.log(f"Connecting to Egeria using: , {self.password}")
+        try:
+            c_client = EgeriaTech(
+                view_server=self.view_server,
+                platform_url=self.platform_url,
+                user_id=self.user,
+                user_pwd=self.password
+            )
+            # Create bearer token for secure access to the Egeria view services
+            token = c_client.create_egeria_bearer_token(Egeria_config[2], Egeria_config[3])
+            # Retrieve the list of collections from Egeria
+            collections: dict = c_client.find_collections(search=Search_str, output_format="dict")
+            # Close the Egeria Client to save resources
+            c_client.close_session()
+        except Exception as e:
+            self.log(f"Error connecting to Egeria: {str(e)}")
+            collections:dict = {"Egeria Error": str(e)}
+        self.post_message(self.EgeriaDataReceived(collections))
+
+    async def update_collection_list(collections: dict):
+        collection_list: DataTable = DataTable(id="collection_list")
+        try:
+            DataProductScreen.collections = collections
+            collection_list.clear(columns=False)
+            collection_list.add_rows(
+                (entry["name"], entry["guid"], entry["type_name"])
+                for entry in collections.values()
+            )
+        except Exception as e:
+            collection_list.add_row("Error", str(e))
+            log(f"Error updating collection list: {str(e)}")
+        return collection_list
 
     def compose(self) -> ComposeResult:
+        # cfg = get_config()
+        # self.view_server = cfg[1]
+        # self.platform_url = cfg[0]
+        # self.user = cfg[2]
+        self.view_server = "qs-view-server"
+        self.platform_url = "https://127.0.0.1:9443"
+        self.user = "erinoverview"
+        self.log(f"Connecting to Egeria using: , {self.platform_url}")
+        yield Header(show_clock=True)
+        yield Container(
+            Static(
+                f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}",
+                id="connection_info",
+            )
+        )
         yield Container(
             Static("MyEgeria", id="title"),
             Static("Data Products", id="main_menu"),
@@ -58,20 +166,36 @@ class DataProductScreen(Screen):
         )
         yield ScrollableContainer(
             Static(f"AvailableData Product Marketplaces:"),
-            DataTable(id="#collection_list"),
+            self.Collection_Datatable(),
             id="main_content")
         yield Container(
             Button("Quit", id="quit"),
+            Footer(),
             id="action_row",
         )
 
     def on_collection_list_row_selected(self, event: DataTable.RowSelected):
+        self.collection_list = self.query_one("#collection_list", DataTable)
         self_row_selected = self.collection_list.get_row(event.row_key)
         self.selected_guid = self_row_selected[1] or ""
         self.selected_name = self_row_selected[0] or ""
         self.selected_type = self_row_selected[2] or ""
+        self.log(f"Selected Data Product: {self.selected_name}")
+        self.coll =  self.get_collections_from_egeria(Egeria_config=self.Egeria_config, Search_str = self.selected_guid)
+        self.collections=self.coll
+        self.update_collection_list()
+
+    def on_egeria_data_received(self, event: EgeriaDataReceived):
+        self.collections = event.data
+        self.update_collection_list()
+
+    def on_table_created(self, event: TableCreated):
+        self.collection_list = event.table
+        return self.collection_list
 
     @on(Button.Pressed, "#quit")
     async def quit(self) -> None:
+
         """Signal the application to Quit gracefully """
         self.post_message(self.QuitRequested())
+

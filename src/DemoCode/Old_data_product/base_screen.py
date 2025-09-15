@@ -14,10 +14,9 @@ from textual.app import ComposeResult
 from textual import on
 from textual.containers import Container
 
-from .demo_config import get_global_config
-# from ..config import get_global_config
-from ..utils.egeria_client import EgeriaTechClientManager
-from ..con_services.egeria_connection import EgeriaConnectionService
+from demo_config import get_global_config
+from egeria_client import EgeriaTechClientManager
+from egeria_connection import EgeriaConnectionService
 
 class BaseScreen(Screen):
     CSS_PATH = ["../styles/common.css", "../styles/base_screen.css"]
