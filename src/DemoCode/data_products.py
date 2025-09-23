@@ -7,18 +7,15 @@
 
 
 """
-import json
 import os
 
-from pyegeria import EgeriaTech, CollectionManager
+from pyegeria import CollectionManager
 from textual.app import App
 from textual.message import Message
-from textual.widgets import DataTable, Static
+from textual.widgets import DataTable
 
 from splash_screen import SplashScreen
 from data_product_screen import DataProductScreen
-from demo_service import close_egeria_connection
-from typing import Optional
 
 class DataProducts(App):
 
@@ -47,67 +44,20 @@ class DataProducts(App):
     def on_splash_screen_splash_continue(self):
         """ Continue received from the Splash Screen"""
         self.log(f"Continue received from Splash Screen, pushing Data Product Screen")
-        # set up the DataTable to display the collections from Egeria
-        self.collection_list: DataTable = DataTable()
-        self.collection_list.id = "collection_list"
-        #     # Add columns to the DataTable
-        self.collection_list.add_columns(*DataProductScreen.ROWS[0])
-        self.collection_list.cursor_type = "row"
-        self.collection_list.zebra_stripes = True
-        self.log(f"Collection List Created: {self.collection_list}")
-        self.log(f"Collection List: {self.collection_list.columns}")
-        self.load_data()
-
-    def load_data(self):
-        # Access Egeria and Create DataTable for Display
-        try:
-            target = self.query_one("#before_static", Static)
-            self.log(f"Target: {target}")
-            # await self.mount(DataTable(id="collection_list"), after=target)
-            self.log(f"Collection List mounted: {self.collection_list}")
-        except Exception as e:
-            self.log(f"Error mounting Collection List: {str(e)}")
-        try:
-            self.log(f"Collection List, type: {type(self.collection_list)}")
-            self.log(f"self.collection_list type: {type(self.collection_list)}")
-            self.collections = self.get_collections_from_egeria(
-                Egeria_config=self.Egeria_config,
-                Search_str="*"
-            )
-            self.log(f"Collections retrieved from Egeria: {self.collections}")
-            if self.collections is None:
-                self.collections = [{ "GUID": "Egeria Error", "displayName": "Egeria Error", "qualifiedName": "Egeria Error", "description": "Egeria Error"}]
-                self.log("Collections from Egeria is None")
-                # return collection_list
-            # self.collections.append({"GUID":"meow","displayName":"meow","qualifiedName":"meow","description":"meow"})
-            self.log(f"Collections: {json.dumps(self.collections[0])}")
-            self.log(f"{type(self.collection_list)}, {self.collection_list is None}")
-            try:
-                self.collection_list.clear(columns=False)
-                for entry in self.collections:
-                    self.collection_list.add_row(
-                            entry.get("GUID"),
-                            entry.get("displayName"),
-                            entry.get("qualifiedName"),
-                            entry.get("description"),
-                    )
-            except Exception as e:
-                self.collection_list.add_row("Error", str(e))
-                self.log(f"Error updating collection list: {str(e)}")
-                self.collection_list.add_row("Error updating collection list", str(e))
-            # await self.update_collection_list(collections)
-        except Exception as e:
-            self.log(f"Error fetching collections: {str(e)}")
-            self.collection_list.add_row("Error fetching collections", str(e))
-        # display the login screen
-        self.push_screen("main_menu")
+        # run the function to retrieve collections data from Egeria
+        self.log(f"Retrieving Data Products from Egeria - get_collections_from_egeria")
+        self.collections = self.get_collections_from_egeria(Egeria_config=self.Egeria_config, Search_str = "*")
+        # Create an instance of the Data Products Screen and pass it the data retrieved from Egeria
+        main_screen_instance = DataProductScreen(self.collections)
+        # Push the Data Products Screen instance to the screen stack to display
+        self.push_screen(main_screen_instance)
 
     def on_data_product_screen_quit_requested(self) -> None:
         """ Quit the application gracefully with a "good" return code (200) """
         self.log(f"Quit requested from Data Product Screen")
         self.exit(200)
 
-    async def get_collections_from_egeria(self, Egeria_config: list, Search_str: str) -> list:
+    def get_collections_from_egeria(self, Egeria_config: list, Search_str: str) -> list:
         self.log(f"Creating client and Connecting to Egeria using: , {Egeria_config}")
         self.platform_url = Egeria_config[0]
         self.view_server = Egeria_config[1]
@@ -121,6 +71,7 @@ class DataProducts(App):
             c_client = CollectionManager(self.view_server, self.platform_url, user_id=self.user, )
             c_client.create_egeria_bearer_token(self.user, self.password)
             response = c_client.find_collections(search=Search_str, output_format="DICT")
+            # response = c_client._async_find_collections(search=Search_str, output_format="DICT")
             # Close the Egeria Client to save resources
             c_client.close_session()
             for entry in response:

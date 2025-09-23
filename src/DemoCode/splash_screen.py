@@ -64,8 +64,7 @@ class SplashScreen(Screen):
                 f"Platform: {self.app_build_platform}",
                 id="splash_meta",
             ),
-            Button("Continue", variant="primary", id="continue"),
-            id="splash_top",
+            id="splash_top"
         )
         yield Header(show_clock=True)
         yield Container(
@@ -80,6 +79,7 @@ class SplashScreen(Screen):
             id="title_row",
         )
         yield top
+        yield Button("Continue", variant="primary", id="continue")
         yield Footer()
 
     async def on_mount(self):
@@ -130,4 +130,7 @@ class SplashScreen(Screen):
 
     @on(Button.Pressed, "#continue")
     async def continue_to_app(self) -> None:
-        self.app.post_message(self.SplashContinue())
+        """ Quit button pressed, isssue continue message to app """
+
+        self.log(f"Continue button pressed, app is: {self.app}")
+        self.app.post_message(SplashScreen.SplashContinue())
