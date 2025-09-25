@@ -133,4 +133,4 @@ class SplashScreen(Screen):
         """ Quit button pressed, isssue continue message to app """
 
         self.log(f"Continue button pressed, app is: {self.app}")
-        self.app.post_message(SplashScreen.SplashContinue())
+        self.post_message(SplashScreen.SplashContinue())

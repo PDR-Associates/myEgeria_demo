@@ -10,18 +10,18 @@
 import os
 
 from pyegeria import CollectionManager
+from textual import on
 from textual.app import App
 from textual.message import Message
-from textual.widgets import DataTable
-
 from splash_screen import SplashScreen
 from data_product_screen import DataProductScreen
+
 
 class DataProducts(App):
 
     SCREENS = {
         "splash": SplashScreen,
-        "main_menu": DataProductScreen,
+        "main_menu": DataProductScreen
     }
 
     class EgeriaDataReceived(Message):
@@ -41,7 +41,8 @@ class DataProducts(App):
         self.log(f"Pushing Splash Screen")
         self.push_screen("splash")
 
-    def on_splash_screen_splash_continue(self):
+    @on(SplashScreen.SplashContinue)
+    def handle_splash_screen_splash_continue(self):
         """ Continue received from the Splash Screen"""
         self.log(f"Continue received from Splash Screen, pushing Data Product Screen")
         # run the function to retrieve collections data from Egeria
@@ -76,35 +77,13 @@ class DataProducts(App):
             c_client.close_session()
             for entry in response:
                 qualified_name = entry.get("qualifiedName", "")
-                # if "DigProdCatalog" in qualified_name:
+                # if typeName = "DigProdCatalog" or whatever
                 self.collections.append(entry)
         except Exception as e:
             self.log(f"Error connecting to Egeria: {str(e)}")
             self.collections.append(f"Egeria Error: {str(e)}")
-        # self.post_message(self.EgeriaDataReceived(self.collections))
+
         return self.collections
-
-    async def update_collection_list(self, collections: list):
-        collection_list = self.query_one("#collection_list", DataTable)
-        try:
-            self.collections = collections
-            collection_list.clear(columns=False)
-            for entry in collections:
-                collection_list.add_row(
-                    entry.get("GUID"),
-                    entry.get("displayName"),
-                    entry.get("qualifiedName"),
-                    entry.get("description"),
-                )
-        except Exception as e:
-            collection_list.add_row("Error in update_collection_list", str(e))
-            self.log(f"Error updating collection list: {str(e)}")
-        finally:
-            return collection_list
-
-    def on_egeria_data_received(self, event: EgeriaDataReceived):
-        self.collections = event.data
-        self.update_collection_list(self.collections)
 
 if __name__ == "__main__":
     os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
