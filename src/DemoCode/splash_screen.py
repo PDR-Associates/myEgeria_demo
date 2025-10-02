@@ -17,11 +17,11 @@ from demo_service import get_config
 
 class SplashScreen(Screen):
     """Splash screen with inline styles (no TCSS)."""
+    app: "DataProducts"
 
     class SplashContinue(Message):
         """Message to continue to the login screen."""
-        def __init__(self):
-            super().__init__()
+        pass
 
     def __init__(self) -> None:
         super().__init__()
@@ -86,6 +86,7 @@ class SplashScreen(Screen):
 
         # Place content in top half, center horizontally
         top = self.query_one("#splash_top", Container)
+        
         top.styles.dock = "top"
         top.styles.height = "50%"
         top.styles.width = "100%"
@@ -131,6 +132,6 @@ class SplashScreen(Screen):
     @on(Button.Pressed, "#continue")
     async def continue_to_app(self) -> None:
         """ Quit button pressed, isssue continue message to app """
-
         self.log(f"Continue button pressed, app is: {self.app}")
-        self.post_message(SplashScreen.SplashContinue())
+        # self.post_message(SplashScreen.SplashContinue())
+        self.app.handle_splash_screen_splash_continue()

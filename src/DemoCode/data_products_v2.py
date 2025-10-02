@@ -10,11 +10,11 @@
 import os
 
 from pyegeria import CollectionManager
-from textual import on
+from textual import on, work
 from textual.app import App
 from textual.message import Message
 from splash_screen import SplashScreen
-from data_product_screen import DataProductScreen
+from data_product_screen_current import DataProductScreen
 
 
 class DataProducts(App):
@@ -33,13 +33,11 @@ class DataProducts(App):
         self.Egeria_config = ["https://127.0.0.1:9443", "qs-view-server", "erinoverview", "secret"]
         self.collections: list = []
         super().__init__()
-
-    def on_mount(self):
         self.title = "MyEgeria"
         self.subtitle = "Data Products"
-        # display the splash screen
-        self.log(f"Pushing Splash Screen")
-        self.push_screen("splash")
+
+    def get_default_screen(self):
+        return self.get_screen("splash")
 
     @on(SplashScreen.SplashContinue)
     def handle_splash_screen_splash_continue(self):
@@ -49,7 +47,7 @@ class DataProducts(App):
         self.log(f"Retrieving Data Products from Egeria - get_collections_from_egeria")
         self.collections = self.get_collections_from_egeria(Egeria_config=self.Egeria_config, Search_str = "*")
         # Create an instance of the Data Products Screen and pass it the data retrieved from Egeria
-        main_screen_instance = DataProductScreen(self.collections)
+        main_screen_instance = DataProductScreen(message=self.collections)
         # Push the Data Products Screen instance to the screen stack to display
         self.push_screen(main_screen_instance)
 
@@ -58,6 +56,7 @@ class DataProducts(App):
         self.log(f"Quit requested from Data Product Screen")
         self.exit(200)
 
+    # @work
     def get_collections_from_egeria(self, Egeria_config: list, Search_str: str) -> list:
         self.log(f"Creating client and Connecting to Egeria using: , {Egeria_config}")
         self.platform_url = Egeria_config[0]
@@ -72,7 +71,6 @@ class DataProducts(App):
             c_client = CollectionManager(self.view_server, self.platform_url, user_id=self.user, )
             c_client.create_egeria_bearer_token(self.user, self.password)
             response = c_client.find_collections(search=Search_str, output_format="DICT")
-            # response = c_client._async_find_collections(search=Search_str, output_format="DICT")
             # Close the Egeria Client to save resources
             c_client.close_session()
             for entry in response:

@@ -68,6 +68,7 @@ class DataProductScreen(Screen):
     ROWS = [
         ("GUID", "Display Name", "Qualified Name", "Description"),
         ]
+    app = "DataProducts"
 
 
     class CollectionTable(Widget):
@@ -88,7 +89,7 @@ class DataProductScreen(Screen):
                 self.collection_list: DataTable = DataTable(id="collection_list")
 
 
-            #confire the DataTable - collection_list
+            # configure the DataTable - collection_list
             # self.collection_list.id = "collection_list"
             # Add columns to the DataTable
             self.collection_list.add_columns(*DataProductScreen.ROWS[0])
@@ -148,6 +149,11 @@ class DataProductScreen(Screen):
             super().__init__()
             self.data = data
 
+    class GetMembers(Message):
+        def __init__(self, qname: str):
+            super().__init__()
+            self.qname = qname
+
     def __init__(self, message: list = None):
         self.Egeria_config = ["https://127.0.0.1:9443", "qs-view-server", "erinoverview", "secret"]
         self.collections: list = message
@@ -195,6 +201,7 @@ class DataProductScreen(Screen):
         self.selected_qname = self_row_selected[2] or ""
         self.selected_desc = self_row_selected[3] or ""
         self.log(f"Selected Data Product: {self.selected_name}")
+        self.post_message(self.GetMembers(self.selected_qname))
 
     @on(Button.Pressed, "#quit")
     async def quit(self) -> None:
