@@ -5,6 +5,7 @@
    This file provides a set of Data Product functions for my_egeria.
 
 """
+import ast
 import json
 import os
 
@@ -14,8 +15,7 @@ from textual import on, work
 from textual.app import App
 from textual.message import Message
 from textual.containers import Container
-from textual.widget import Widget
-from textual.widgets import Label, Button, TextArea, Header, Static, Footer, DataTable
+from textual.widgets import Label, Button, TextArea, Header, Static, Footer
 from data_product_screen_current import DataProductScreen
 from demo_service import get_config
 from pyegeria._output_formats import select_output_format_set
@@ -160,9 +160,6 @@ class DataProducts(App):
         }
     """
 
-    # class ListofCollections(Container):
-        # collections: list[dict] = (reactive([], layout=True))
-
     def __init__(self):
         super().__init__()
         self.Egeria_config = ["https://127.0.0.1:9443", "qs-view-server", "erinoverview", "secret"]
@@ -172,14 +169,12 @@ class DataProducts(App):
         self.user = self.Egeria_config[2]
         self.password = self.Egeria_config[3]
         self.token: str
-        # self.collections = self.CollectionTable.collections
-        # self.collections: list[dict] = self.query_one()
+
         """ Access Egeria API using bearer token """
         self.log(f"Accessing Egeria API")
         try:
             self.log(f"initializing egeria client with: , {self.platform_url} , {self.view_server} , {self.user} , {self.password}")
-            # self.c_client = EgeriaTech(self.view_server, self.platform_url, user_id=self.user, )
-            # self.token = self.c_client.create_egeria_bearer_token(self.user, self.password)
+            # Retrieve needed format sets from Egeria
             catalog_set = select_output_format_set("Digital-Product-Catalog-MyE", "DICT")
             if catalog_set:
                 self.log("Successfully retrieved format set by name!")
@@ -215,25 +210,86 @@ class DataProducts(App):
         self.log(f"Retrieving Data Products from Egeria - get_collections_from_egeria")
         # self.get_collections_from_egeria(Egeria_config=self.Egeria_config, Search_str = "*")
         try:
-            response = exec_format_set(format_set_name="digital-product-catalog-MyE",
-                                       output_format = "DICT",
-                                       view_server=self.view_server,
-                                       view_url=self.platform_url,
-                                       user=self.user,
-                                       user_pass=self.password)
-            # with open('egeria_results.json', 'w') as out_file:
-            #     json.dump(response, out_file)
-            for entry in response:
-                # self.collections.append(entry)
-                if self.collections:
-                    self.collections = self.collections + [entry]
-                else:
-                    self.collections = [entry]
+            self.collections = [{}]
+            response = exec_format_set(
+                format_set_name="Digital-Product-Catalog-MyE",
+                output_format="DICT",
+                view_server=self.view_server,
+                view_url=self.platform_url,
+                user=self.user,
+                user_pass=self.password,
+            )
+            self.log(f"response: {response}")
+
+            # Robustly extract data payload from response["data"]. Then populate self.collections.
+            payload = None
+            if isinstance(response, dict) and "data" in response:
+                value = response["data"]
+                self.log(f"value: {value}")
+                if isinstance(value, (dict, list)):
+                    payload = value
+                    self.log(f"payload: {payload}")
+                elif isinstance(value, str):
+                    text = value.strip()
+                    self.log(f"text: {text}")
+                    # Decode text (ast)
+                    try:
+                        payload = ast.literal_eval(text)
+                        self.log(f"payload: {payload}")
+                    except Exception:
+                        payload = None
+
+            if payload is None:
+                self.log("No parsable data found in response['data']")
             else:
-                self.collections = []
+                # Ensure self.collections becomes a list of dicts for downstream UI
+                if isinstance(payload, list):
+                    self.collections = payload
+                    self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
+                elif isinstance(payload, dict):
+                    # If the dict wraps the actual list of collections under a known key, unwrap it
+                    inner = payload.get("collections") if "collections" in payload else None
+                    self.log(f"inner: {inner}")
+                    if isinstance(inner, list):
+                        self.collections = inner
+                        self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
+                    else:
+                        self.collections = [payload]
+                        self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
+                else:
+                    # Unknown shape; keep default empty element and log
+                    self.log(f"Unexpected payload type: {type(payload)}")
+
+            self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
+
+            # Normalize keys and values from various response shapes to what the UI expects
+            normalized = []
+            for item in self.collections:
+                if not isinstance(item, dict):
+                    continue
+                n = {}
+                # Map GUID
+                n["GUID"] = item.get("GUID") or ""
+                # Map display name
+                n["displayName"] = item.get("Display Name") or ""
+                # Map type name
+                n["typeName"] = item.get("Type Name") or ""
+                # Map description
+                n["description"] = item.get("Description") or ""
+                # Map qualified name
+                n["qualifiedName"] = item.get("Qualified Name") or ""
+                # Members / relationships (optional)
+                n["members"] = item.get("Containing Members") or []
+                n["memberOf"] = item.get("Member Of") or None
+                # Map status
+                n["status"] = item.get("Status") or None
+                normalized.append(n)
+            if normalized:
+                self.log(f" Normalized : {normalized}")
+                self.collections = normalized
+                self.log(f"collections: {type(self.collections)} len={len(self.collections)}")
         except Exception as e:
             self.log(f"Error connecting to Egeria: {str(e)}")
-            # self.collections.append({"Egeria Error" : e})
             self.collections = [{"Egeria Error": str(e)}]
         self.log(f"Collections: type: {type(self.collections)}, {len(self.collections)}")
         # Create an instance of the Data Products Screen and pass it the data retrieved from Egeria
@@ -253,7 +309,6 @@ class DataProducts(App):
     def on_data_product_screen_get_members(self, selected_qname):
         """ Retrieve members of a collection """
         self.selected_qualified_name = selected_qname
-        self.collections.clear()
         try:
             for collection in self.collections:
                 if collection.get("qualifiedName") == self.selected_qualified_name:
@@ -266,8 +321,8 @@ class DataProducts(App):
         except Exception as e:
             self.log(f"Error retrieving members of collection {self.selected_qualified_name}: {str(e)}")
             self.collections = [{"Error retrieving members": str(e)}]
-        #call Data Product Screen with new collection (Error Notification or members
-        self.push_screen(DataProductScreen())
+        #call Data Product Screen with new collection (Error Notification or members)
+        self.push_screen(DataProductScreen(self.collections))
 
 if __name__ == "__main__":
     os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")

@@ -97,10 +97,11 @@ class DataProductScreen(Screen):
         try:
             for entry in self.collections:
                 self.collection_datatable.add_row(
-                    entry.get("GUID"),
-                    entry.get("displayName"),
-                    entry.get("qualifiedName"),
-                    entry.get("description"),
+                    entry.get("GUID", ""),
+                    entry.get("displayName", ""),
+                    entry.get("qualifiedName", ""),
+                    entry.get("typeName", ""),
+                    entry.get("description", ""),
                 )
         except Exception as e:
             self.collection_datatable.add_row("Error", str(e))
@@ -117,13 +118,13 @@ class DataProductScreen(Screen):
                 id="connection_info",
             )
         )
-        self.log("Yielded a message")
+        # self.log("Yielded a message")
         yield Container(
             Static("MyEgeria", id="title"),
             Static("Data Products", id="main_menu"),
             id = "title_row",
         )
-        self.log("Yielded another message")
+        # self.log("Yielded another message")
         yield ScrollableContainer(
             Vertical(
                 Static(f"Available Data Product Marketplaces:", id="before_static"),
@@ -131,14 +132,14 @@ class DataProductScreen(Screen):
                 Static("End of DataTable", id="after_static"),
             ),
             id="main_content")
-        self.log("Yielded a DataTable")
+        # self.log("Yielded a DataTable")
         yield Container(
             Button("Quit", id="quit"),
             # Footer(),
             id="action_row",
         )
         yield Footer()
-        self.log("done yielding")
+        # self.log("done yielding")
 
     async def on_collection_datatable_row_selected(self, event: DataTable.RowSelected):
         self.collection_datatable = self.query_one("#collection_datatable", DataTable)
@@ -146,7 +147,9 @@ class DataProductScreen(Screen):
         self.selected_guid = self_row_selected[0] or ""
         self.selected_name = self_row_selected[1] or ""
         self.selected_qname = self_row_selected[2] or ""
-        self.selected_desc = self_row_selected[3] or ""
+        # Column 3 is Type Name, Column 4 is Description
+        self.selected_type = self_row_selected[3] or ""
+        self.selected_desc = self_row_selected[4] or ""
         self.log(f"Selected Data Product: {self.selected_name}")
 
     @on(Button.Pressed, "#quit")
