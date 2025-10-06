@@ -6,20 +6,19 @@
 
 """
 import ast
-import json
 import os
 
-from textual.reactive import reactive
 from textual.screen import Screen
-from textual import on, work
+from textual import on
 from textual.app import App
 from textual.message import Message
 from textual.containers import Container
 from textual.widgets import Label, Button, TextArea, Header, Static, Footer
-from data_product_screen_current import DataProductScreen
 from demo_service import get_config
 from pyegeria._output_formats import select_output_format_set
 from pyegeria.format_set_executor import exec_format_set
+from src.DemoCode.data_product_screen_current import DataProductScreen
+from src.DemoCode.members_screen_current import MembersScreen
 
 
 class SplashScreen(Screen):
@@ -148,6 +147,7 @@ class DataProducts(App):
     SCREENS = {
         "splash": SplashScreen,
         "main_menu": DataProductScreen,
+        "members": MembersScreen,
         "_default": DataProductScreen
     }
 
@@ -259,35 +259,8 @@ class DataProducts(App):
                 else:
                     # Unknown shape; keep default empty element and log
                     self.log(f"Unexpected payload type: {type(payload)}")
-
+            self.collections = payload
             self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
-
-            # Normalize keys and values from various response shapes to what the UI expects
-            normalized = []
-            for item in self.collections:
-                if not isinstance(item, dict):
-                    continue
-                n = {}
-                # Map GUID
-                n["GUID"] = item.get("GUID") or ""
-                # Map display name
-                n["displayName"] = item.get("Display Name") or ""
-                # Map type name
-                n["typeName"] = item.get("Type Name") or ""
-                # Map description
-                n["description"] = item.get("Description") or ""
-                # Map qualified name
-                n["qualifiedName"] = item.get("Qualified Name") or ""
-                # Members / relationships (optional)
-                n["members"] = item.get("Containing Members") or []
-                n["memberOf"] = item.get("Member Of") or None
-                # Map status
-                n["status"] = item.get("Status") or None
-                normalized.append(n)
-            if normalized:
-                self.log(f" Normalized : {normalized}")
-                self.collections = normalized
-                self.log(f"collections: {type(self.collections)} len={len(self.collections)}")
         except Exception as e:
             self.log(f"Error connecting to Egeria: {str(e)}")
             self.collections = [{"Egeria Error": str(e)}]
@@ -306,15 +279,16 @@ class DataProducts(App):
         self.log(f"Quit requested from Data Product Screen")
         self.exit(200)
 
-    def on_data_product_screen_get_members(self, selected_qname):
+    def on_data_product_screen_catalog_selected(self, selected_qname):
         """ Retrieve members of a collection """
         self.selected_qualified_name = selected_qname
+        self.members_list: list = []
         try:
             for collection in self.collections:
                 if collection.get("qualifiedName") == self.selected_qualified_name:
-                    members: list = collection.get("members", [])
+                    members: list = collection.get("members", [None])
                     for member in members:
-                        self.collections.append(member)
+                        self.members_list.append(member)
                         continue
                 else:
                     continue
@@ -322,7 +296,7 @@ class DataProducts(App):
             self.log(f"Error retrieving members of collection {self.selected_qualified_name}: {str(e)}")
             self.collections = [{"Error retrieving members": str(e)}]
         #call Data Product Screen with new collection (Error Notification or members)
-        self.push_screen(DataProductScreen(self.collections))
+        self.push_screen(MembersScreen(self.members_list))
 
 if __name__ == "__main__":
     os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
