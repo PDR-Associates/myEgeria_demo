@@ -114,7 +114,7 @@ class DataProductScreen(Screen):
                         entry.get("Type Name", "None"),
                         entry.get("Description", "None"),
                     )
-                    self.log(f"DataTable row added with: {entry.get('Display Name', '')}, {entry.get('=Qualified Name', '')}, {entry.get('Type Name', '')}, {entry.get('Description', '')}")
+                    self.log(f"DataTable row added with: {entry.get('Display Name', '')}, {entry.get('Qualified Name', '')}, {entry.get('Type Name', '')}, {entry.get('Description', '')}")
             except Exception as e:
                 self.collection_datatable.add_row("Error", "Error updating collection list", str(e))
                 self.log(f"Error updating collection list: {str(e)}")

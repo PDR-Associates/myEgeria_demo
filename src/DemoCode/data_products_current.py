@@ -19,6 +19,7 @@ from pyegeria._output_formats import select_output_format_set
 from pyegeria.format_set_executor import exec_format_set
 from src.DemoCode.data_product_screen_current import DataProductScreen
 from src.DemoCode.members_screen_current import MembersScreen
+from src.DemoCode.member_details_screen_current import MemberDetailsScreen
 
 
 class SplashScreen(Screen):
@@ -148,6 +149,7 @@ class DataProducts(App):
         "splash": SplashScreen,
         "main_menu": DataProductScreen,
         "members": MembersScreen,
+        "member_details": MemberDetailsScreen,
         "_default": DataProductScreen
     }
 
@@ -279,24 +281,141 @@ class DataProducts(App):
         self.log(f"Quit requested from Data Product Screen")
         self.exit(200)
 
-    def on_data_product_screen_catalog_selected(self, selected_qname):
+    def on_data_product_screen_catalog_selected(self, selected_row: dict):
         """ Retrieve members of a collection """
-        self.selected_qualified_name = selected_qname
+        self.selected_row = selected_row
+        self.selected_guid = self.selected_row.get("GUID"),
+        self.selected_name = self.selected_row.get("Name"),
+        self.selected_qualified_name = self.selected_row.get("QName"),
+        self.selected_type = self.selected_row.get("Type"),
+        self.selected_description = self.selected_row.get("Desc"),
         self.members_list: list = []
-        try:
-            for collection in self.collections:
-                if collection.get("qualifiedName") == self.selected_qualified_name:
-                    members: list = collection.get("members", [None])
-                    for member in members:
-                        self.members_list.append(member)
-                        continue
+
+        response = exec_format_set(
+            format_set_name="Digital-Products-MyE",
+            params = {"search_string" : self.selected_qualified_name},
+            output_format="DICT",
+            view_server=self.view_server,
+            view_url=self.platform_url,
+            user=self.user,
+            user_pass=self.password,
+        )
+        self.log(f"response: {response}")
+
+        # Robustly extract data payload from response["data"]. Then populate self.members.
+        payload = None
+        if isinstance(response, dict) and "data" in response:
+            value = response["data"]
+            self.log(f"value: {value}")
+            if isinstance(value, (dict, list)):
+                payload = value
+                self.log(f"payload: {payload}")
+            elif isinstance(value, str):
+                text = value.strip()
+                self.log(f"text: {text}")
+                # Decode text (ast)
+                try:
+                    payload = ast.literal_eval(text)
+                    self.log(f"payload: {payload}")
+                except Exception:
+                    payload = None
+
+        if payload is None:
+            self.log("No parsable data found in response['data']")
+        else:
+            # Ensure self.members becomes a list of dicts for downstream UI
+            if isinstance(payload, list):
+                self.members = payload
+                self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
+            elif isinstance(payload, dict):
+                # If the dict wraps the actual list of members under a known key, unwrap it
+                inner = payload.get("members") if "members" in payload else None
+                self.log(f"inner: {inner}")
+                if isinstance(inner, list):
+                    self.members = inner
+                    self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
                 else:
-                    continue
-        except Exception as e:
-            self.log(f"Error retrieving members of collection {self.selected_qualified_name}: {str(e)}")
-            self.collections = [{"Error retrieving members": str(e)}]
-        #call Data Product Screen with new collection (Error Notification or members)
-        self.push_screen(MembersScreen(self.members_list))
+                    self.members = [payload]
+                    self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
+            else:
+                # Unknown shape; keep default empty element and log
+                self.log(f"Unexpected payload type: {type(payload)}")
+        self.members = payload
+        self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
+
+        self.log(f"Members: type: {type(self.members)}, {len(self.members)}")
+        # Create an instance of the Members Screen and pass it the data retrieved from Egeria
+        # and push it to the top of screen stack to display
+        self.push_screen(MembersScreen(self.members))
+
+    def on_member_screen_member_selected(self, selected_row: dict):
+        """ Retrieve members of a collection """
+        self.selected_row = selected_row
+        self.selected_qualified_name = self.selected_row.get("QName")
+
+        # Retrieve selected Member
+        response = exec_format_set(
+            format_set_name="Digital-Products-MyE",
+            params={"search_string": self.selected_qualified_name},
+            output_format="DICT",
+            view_server=self.view_server,
+            view_url=self.platform_url,
+            user=self.user,
+            user_pass=self.password,
+        )
+        self.log(f"response: {response}")
+
+        # Robustly extract data payload from response["data"]. Then populate self.members.
+        payload = None
+        if isinstance(response, dict) and "data" in response:
+            value = response["data"]
+            self.log(f"value: {value}")
+            if isinstance(value, (dict, list)):
+                payload = value
+                self.log(f"payload: {payload}")
+            elif isinstance(value, str):
+                text = value.strip()
+                self.log(f"text: {text}")
+                # Decode text (ast)
+                try:
+                    payload = ast.literal_eval(text)
+                    self.log(f"payload: {payload}")
+                except Exception:
+                    payload = None
+
+        if payload is None:
+            self.log("No parsable data found in response['data']")
+        else:
+            # Ensure self.members becomes a list of dicts for downstream UI
+            if isinstance(payload, list):
+                self.members = payload
+                self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
+            elif isinstance(payload, dict):
+                # If the dict wraps the actual list of members under a known key, unwrap it
+                inner = payload.get("members") if "members" in payload else None
+                self.log(f"inner: {inner}")
+                if isinstance(inner, list):
+                    self.members = inner
+                    self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
+                else:
+                    self.members = [payload]
+                    self.log(f"collections after extraction: {type(self.members)} len={len(self.members)}")
+            else:
+                # Unknown shape; keep default empty element and log
+                self.log(f"Unexpected payload type: {type(payload)}")
+        self.members = payload
+        self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
+
+        # If the member has members carry on drilling down to leaf level -
+        # Create an instance of the Members Screen and pass it the data retrieved from Egeria
+        # and push it to the top of screen stack to display
+        if self.members is not None:
+            self.push_screen(MembersScreen(self.members))
+        else:
+            # Display member details screen
+            # gather details returned from egeria
+            self.push_screen(MemberDetailsScreen(self.members))
+
 
 if __name__ == "__main__":
     os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
