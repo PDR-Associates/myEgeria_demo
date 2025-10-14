@@ -7,8 +7,6 @@
 
 
 """
-from typing import Type
-from xml.etree.ElementTree import QName
 
 from textual import on
 from textual.app import ComposeResult
@@ -27,48 +25,50 @@ class DataProductScreen(Screen):
         ("escape", "quit", "Quit"),
         ]
 
-    CSS = """
-    .connection_info {
-        background: $panel;
-        color: $text;
-        border: round $primary;
-        height: 1fr;
-        width: 1fr;
-    }
-    .title_row {
-        background: $panel;
-        color: $text;
-        border: round $primary;
-        height: 1fr;
-        width: 1fr;
-        align: center middle;
-    }
-    .main_content {
-        background: $panel;
-        color: $text;
-        border: round $primary;
-        height: 10fr;
-        width: 1fr;
-    }
-    .action_row {
-        background: $panel;
-        color: $text;
-        border: round $primary;
-        height: 2fr;
-        width: 1fr;
-    }
-    #title {
-        align: center middle;
-    }
-    #main_menu {
-        align: center middle;
-    }       
-    """
+    CSS_PATH = ["data_products_css.tcss"]
+    # CSS = """
+    # .connection_info {
+    #     background: $panel;
+    #     color: $text;
+    #     border: round $primary;
+    #     height: 1fr;
+    #     width: 1fr;
+    # }
+    # .title_row {
+    #     background: $panel;
+    #     color: $text;
+    #     border: round $primary;
+    #     height: 1fr;
+    #     width: 1fr;
+    #     align: center middle;
+    # }
+    # .main_content {
+    #     background: $panel;
+    #     color: $text;
+    #     border: round $primary;
+    #     height: 10fr;
+    #     width: 1fr;
+    # }
+    # .action_row {
+    #     background: $panel;
+    #     color: $text;
+    #     border: round $primary;
+    #     height: 2fr;
+    #     width: 1fr;
+    # }
+    # #title {
+    #     align: center middle;
+    # }
+    # #main_menu {
+    #     align: center middle;
+    # }
+    # """
 
     ROWS = [
         ("GUID", "Display Name", "Qualified Name", "Type Name", "Description"),
         ]
 
+    app = "DataProducts"
 
     class QuitRequested(Message):
         """ Message to terminate application gracefully """
@@ -82,10 +82,10 @@ class DataProductScreen(Screen):
             self.selected_data = selected_data
 
 
-    def __init__(self, collections: list[dict] = None):
+    def __init__(self, collections):
         super().__init__()
         self.collections = collections
-        self.log(f"Data Product Screen init started with data: {collections}")
+        # self.log(f"Data Product Screen init started with data: {collections}")
         self.collection_datatable: DataTable = DataTable()
         # confire the DataTable - collection_datatable
         self.collection_datatable.id = "collection_datatable"
@@ -96,36 +96,45 @@ class DataProductScreen(Screen):
         # give the DataTable zebra stripes so it is easier to follow across rows on the screen
         self.collection_datatable.zebra_stripes = True
         # log the results of configuring the DataTable
-        self.log(f"Collection DataTable Created:")
-        self.log(f"Collection DataTable: {self.collection_datatable.columns}")
+        # self.log(f"Collection DataTable Created:")
+        # self.log(f"Collection DataTable: {self.collection_datatable.columns}")
         # Check that we have at least one Data Product Catalogue
         if self.collections is None:
             # No Data Product Catalogues found
-            self.log("No Data Product Catalogues found")
+            # self.log("No Data Product Catalogues found")
             self.collection_datatable.add_row("Error", "No Data Product Catalogues found")
         else:
             # Load data into the DataTable
-            try:
-                for entry in self.collections:
+            if type(self.collections) == list:
+                try:
+                    for entry in self.collections:
+                        self.collection_datatable.add_row(
+                            entry.get("Display Name", "None"),
+                            entry.get("Qualified Name", "None"),
+                            entry.get("Type Name", "None"),
+                            entry.get("Description", "None"),
+                        )
+                except Exception as e:
+                    self.collection_datatable.add_row("Error", "Error updating collection list", str(e))
+
+            elif type(self.collections) == dict:
+                try:
                     self.collection_datatable.add_row(
-                        # entry.get("GUID", "None"),
-                        entry.get("Display Name", "None"),
-                        entry.get("Qualified Name", "None"),
-                        entry.get("Type Name", "None"),
-                        entry.get("Description", "None"),
-                    )
-                    self.log(f"DataTable row added with: {entry.get('Display Name', '')}, {entry.get('Qualified Name', '')}, {entry.get('Type Name', '')}, {entry.get('Description', '')}")
-            except Exception as e:
-                self.collection_datatable.add_row("Error", "Error updating collection list", str(e))
-                self.log(f"Error updating collection list: {str(e)}")
+                        self.collections.get("Display Name", "None"),
+                        self.collections.get("Qualified Name", "None"),
+                        self.collections.get("Type Name", "None"),
+                        self.collections.get("Description", "None")
+                        )
+                except Exception as e:
+                    self.collection_datatable.add_row("Error", "Error unpacking collection dict", str(e))
+            else:
+                self.collection_datatable.add_row("Error", "Unknown data shape detected", str(type(self.collections)))
         cfg = get_config()
         self.view_server = cfg[1]
         self.platform_url = cfg[0]
         self.user = cfg[2]
         self.password = cfg[3]
-        self.log(f"Refreshing DataTable")
         self.collection_datatable.refresh(layout=True, recompose=True)
-        self.log(f"DataTable Refreshed")
 
     def compose(self) -> ComposeResult:
         """Create the layout of the screen."""
@@ -155,17 +164,19 @@ class DataProductScreen(Screen):
         yield Footer()
         self.log("done yielding, now waiting for user input")
 
-    async def on_collection_datatable_row_selected(self, event: DataTable.RowSelected):
+    async def on_data_table_row_selected(self, event: DataTable.RowSelected):
         self.log(f"Row Selected, Processing selection")
         self.collection_datatable = self.query_one("#collection_datatable", DataTable)
         self_row_selected = self.collection_datatable.get_row(event.row_key)
-        self.selected_guid = self_row_selected[0] or ""
-        self.selected_name = self_row_selected[1] or ""
-        self.selected_qname = self_row_selected[2] or ""
-        self.selected_type = self_row_selected[3] or ""
-        self.selected_desc = self_row_selected[4] or ""
-        self.log(f"Selected Data Product: {self.selected_name}")
-        self.selected_data = {"GUID":self.selected_guid,
+        self.selected_name = self_row_selected[0] or ""
+        self.selected_qname = self_row_selected[1] or ""
+        self.selected_type = self_row_selected[2] or ""
+        self.selected_desc = self_row_selected[3] or ""
+        qname = self.selected_qname.split(']')[0].strip('[')
+        self.selected_qname = qname
+
+        self.log(f"Selected Data Product: {self.selected_name}, qname: {self.selected_qname}, type: {self.selected_type}, desc: {self.selected_desc}")
+        self.selected_data = {
                               "Name":self.selected_name,
                               "QName":self.selected_qname,
                               "Type":self.selected_type,

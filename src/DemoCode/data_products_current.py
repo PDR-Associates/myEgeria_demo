@@ -153,14 +153,16 @@ class DataProducts(App):
         "_default": DataProductScreen
     }
 
-    DEFAULT_CSS = """
-    Screen {
-        background: $surface;
-        border: solid $primary;
-        padding: 1;
-        height: auto;
-        }
-    """
+    CSS_PATH = ["data_products_css.tcss"]
+
+    # DEFAULT_CSS = """
+    # Screen {
+    #     background: $surface;
+    #     border: solid $primary;
+    #     padding: 1;
+    #     height: auto;
+    #     }
+    # """
 
     def __init__(self):
         super().__init__()
@@ -269,7 +271,8 @@ class DataProducts(App):
         self.log(f"Collections: type: {type(self.collections)}, {len(self.collections)}")
         # Create an instance of the Data Products Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
-        self.push_screen(DataProductScreen(self.collections))
+        dpinstance = DataProductScreen(self.collections)
+        self.push_screen(dpinstance)
 
     def handle_splash_screen_splash_continue(self):
         """Allow direct calls from SplashScreen to continue the app flow."""
@@ -281,19 +284,20 @@ class DataProducts(App):
         self.log(f"Quit requested from Data Product Screen")
         self.exit(200)
 
-    def on_data_product_screen_catalog_selected(self, selected_row: dict):
+    def on_data_product_screen_catalog_selected(self, message: DataProductScreen.CatalogSelected):
         """ Retrieve members of a collection """
-        self.selected_row = selected_row
-        self.selected_guid = self.selected_row.get("GUID"),
-        self.selected_name = self.selected_row.get("Name"),
-        self.selected_qualified_name = self.selected_row.get("QName"),
-        self.selected_type = self.selected_row.get("Type"),
-        self.selected_description = self.selected_row.get("Desc"),
+        self.selected_row = message.selected_data
+        self.log(f"selected_row: {self.selected_row}")
+        # self.selected_guid = self.selected_row.get("GUID"),
+        self.selected_name =message.selected_data["Name"],
+        self.selected_qualified_name = message.selected_data["QName"],
+        self.selected_type = message.selected_data["Type"],
+        self.selected_description = message.selected_data["Desc"],
         self.members_list: list = []
-
+        self.log(f"qname: {self.selected_qualified_name}<====")
         response = exec_format_set(
             format_set_name="Digital-Products-MyE",
-            params = {"search_string" : self.selected_qualified_name},
+            params = {"search_string" : self.selected_qualified_name[0]},
             output_format="DICT",
             view_server=self.view_server,
             view_url=self.platform_url,
@@ -322,6 +326,7 @@ class DataProducts(App):
 
         if payload is None:
             self.log("No parsable data found in response['data']")
+            self.members = None
         else:
             # Ensure self.members becomes a list of dicts for downstream UI
             if isinstance(payload, list):
@@ -340,15 +345,18 @@ class DataProducts(App):
             else:
                 # Unknown shape; keep default empty element and log
                 self.log(f"Unexpected payload type: {type(payload)}")
-        self.members = payload
+        if self.members is not None:
+            self.members = payload
+        else:
+            self.members = ["There are no members for this collection"]
         self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
-
         self.log(f"Members: type: {type(self.members)}, {len(self.members)}")
         # Create an instance of the Members Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
-        self.push_screen(MembersScreen(self.members))
+        ms_instance = MembersScreen(self.members)
+        self.push_screen(ms_instance)
 
-    def on_member_screen_member_selected(self, selected_row: dict):
+    def on_members_screen_member_selected(self, selected_row: dict):
         """ Retrieve members of a collection """
         self.selected_row = selected_row
         self.selected_qualified_name = self.selected_row.get("QName")
@@ -384,7 +392,7 @@ class DataProducts(App):
                     payload = None
 
         if payload is None:
-            self.log("No parsable data found in response['data']")
+            self.log(f"No parsable data found in response from Egeria{response['data']}")
         else:
             # Ensure self.members becomes a list of dicts for downstream UI
             if isinstance(payload, list):
@@ -405,16 +413,79 @@ class DataProducts(App):
                 self.log(f"Unexpected payload type: {type(payload)}")
         self.members = payload
         self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
-
         # If the member has members carry on drilling down to leaf level -
         # Create an instance of the Members Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
         if self.members is not None:
-            self.push_screen(MembersScreen(self.members))
+            ms_instance = MembersScreen(self.members)
+            self.push_screen(ms_instance)
         else:
             # Display member details screen
             # gather details returned from egeria
-            self.push_screen(MemberDetailsScreen(self.members))
+            mds_instance = MemberDetailsScreen(payload)
+            self.push_screen(mds_instance)
+
+    def on_members_screen_quit_requested(self) -> None:
+        """ Quit the application gracefully with a "good" return code (200) """
+        self.log(f"Quit requested from Members Screen")
+        self.exit(200)
+
+    def on_members_screen_back_requested(self) -> None:
+        """ Quit the application gracefully with a "good" return code (200) """
+        self.log(f"Back requested from Members Screen")
+        self.switch_screen("main_menu")
+
+    def on_members_screen_member_details(self, selected_row: dict):
+        """ Retrieve members of a collection """
+        self.selected_row = selected_row
+        self.selected_qualified_name = self.selected_row.get("QName")
+
+        # Retrieve selected Member
+        response = exec_format_set(
+            format_set_name="Digital-Products-MyE",
+            params={"search_string": self.selected_qualified_name},
+            output_format="DICT",
+            view_server=self.view_server,
+            view_url=self.platform_url,
+            user=self.user,
+            user_pass=self.password,
+        )
+        self.log(f"response: {response}")
+
+        # Robustly extract data payload from response["data"]. Then populate self.members.
+        payload = None
+        if isinstance(response, dict) and "data" in response:
+            value = response["data"]
+            self.log(f"value: {value}")
+            if isinstance(value, (dict, list)):
+                payload = value
+                self.log(f"payload: {payload}")
+            elif isinstance(value, str):
+                text = value.strip()
+                self.log(f"text: {text}")
+                # Decode text (ast)
+                try:
+                    payload = ast.literal_eval(text)
+                    self.log(f"payload: {payload}")
+                except Exception:
+                    payload = None
+
+        if payload is None:
+            self.log(f"No parsable data found in response from Egeria{response['data']}")
+        # Create an instance of the Member Details Screen and pass it the data retrieved from Egeria
+        # and push it to the top of screen stack to display
+        mds_instance = MemberDetailsScreen(payload)
+        self.push_screen(mds_instance)
+
+    def on_member_details_screen_quit_requested(self) -> None:
+        """ Quit the application gracefully with a "good" return code (200) """
+        self.log(f"Quit requested from Members Screen")
+        self.push_screen("main_menu")
+
+    def on_member_details_screen_back_requested(self) -> None:
+        """ Quit the application gracefully with a "good" return code (200) """
+        self.log(f"Back requested from Members Screen")
+        self.pop_screen()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,41 @@
+Screen {
+        background: $surface;
+        border: solid $primary;
+        padding: 1;
+        height: auto;
+        }
+.connection_info {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+        height: 1fr;
+        width: 1fr;
+    }
+    .title_row {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+        height: 1fr;
+        width: 1fr;
+        align: center middle;
+    }
+    .main_content {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+        height: 10fr;
+        width: 1fr;
+    }
+    .action_row {
+        background: $panel;
+        color: $text;
+        border: round $primary;
+        height: 2fr;
+        width: 1fr;
+    }
+    #title {
+        align: center middle;
+    }
+    #main_menu {
+        align: center middle;
+    }
