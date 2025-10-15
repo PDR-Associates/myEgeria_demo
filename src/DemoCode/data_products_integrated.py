@@ -8,6 +8,7 @@
 import ast
 import os
 
+from textual.css.query import NoMatches
 from textual.screen import Screen, ModalScreen
 from textual import on
 from textual.app import App, ComposeResult
@@ -210,7 +211,6 @@ class DataProducts(App):
         yield ScrollableContainer(
             Vertical(
                 Static(f"Available Data Product Marketplaces:\n\n", id="before_static"),
-                # self.collection_datatable,
                 Static("\n\nEnd of DataTable", id="after_static"),
             ),
             id="main_content")
@@ -221,7 +221,6 @@ class DataProducts(App):
         yield Footer()
         self.log("done yielding, now waiting for user input")
 
-    @on(SplashScreen.SplashContinue)
     def on_splash_screen_splash_continue(self):
         """ Continue received from the Splash Screen"""
         self.log(f"Continue received from Splash Screen, so remove splash screen")
@@ -341,21 +340,30 @@ class DataProducts(App):
         self.platform_url = cfg[0]
         self.user = cfg[2]
         self.password = cfg[3]
-        catalog_mounted =self.query_one("#collection_datatable")
-        if not catalog_mounted:
+        try:
+            catalog_mounted =self.query_one("#collection_datatable")
+            if not catalog_mounted:
+                self.mount(self.collection_datatable, after="#before_static")
+            else:
+                self.collection_datatable.refresh(layout=True, recompose=True)
+        except (NoMatches):
             self.mount(self.collection_datatable, after="#before_static")
-        else:
-            self.collection_datatable.refresh(layout=True, recompose=True)
 
     def handle_splash_screen_splash_continue(self):
         """Allow direct calls from SplashScreen to continue the app flow."""
         # Delegate to the standard event handler so logic stays in one place
         self.on_splash_screen_splash_continue()
 
-    def on_data_product_screen_quit_requested(self) -> None:
+    @on (Button.Pressed , id="quit")
+    def handle_button_quit_clicked(self):
         """ Quit the application gracefully with a "good" return code (200) """
-        self.log(f"Quit requested from Data Product Screen")
+        self.log(f"Quit button clicked")
         self.exit(200)
+
+    # def on_data_product_screen_quit_requested(self) -> None:
+    #     """ Quit the application gracefully with a "good" return code (200) """
+    #     self.log(f"Quit requested from Data Product Screen")
+    #     self.exit(200)
 
     def on_data_product_screen_catalog_selected(self, message: DataProductScreen.CatalogSelected):
         """ Retrieve members of a collection """
@@ -469,13 +477,16 @@ class DataProducts(App):
         self.user = cfg[2]
         self.password = cfg[3]
         # self.log(f"Refreshing DataTable")
-        collection_mounted = self.query_one("#collection_datatable")
-        if collection_mounted:
-            self.collection_datatable.remove()
-        widget_to_mount = self.query_one("#member_datatable")
-        if not widget_to_mount:
+        try:
+            collection_mounted = self.query_one("#collection_datatable")
+            if collection_mounted:
+                self.collection_datatable.remove()
+            widget_to_mount = self.query_one("#member_datatable")
+            if not widget_to_mount:
+                self.mount(self.member_datatable, after="after_static")
+            self.member_datatable.refresh(layout=True, recompose=True)
+        except (NoMatches):
             self.mount(self.member_datatable, after="after_static")
-        self.member_datatable.refresh(layout=True, recompose=True)
         # self.log(f"DataTable Refreshed")
 
     def on_members_screen_member_selected(self, selected_row: dict):
@@ -539,23 +550,25 @@ class DataProducts(App):
         # Create an instance of the Members Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
         if self.members is not None:
-            ms_instance = MembersScreen(self.members)
-            self.push_screen(ms_instance)
+            self.process_members()
+        #     ms_instance = MembersScreen(self.members)
+        #     self.push_screen(ms_instance)
         else:
+            self.display_member_details()
             # Display member details screen
             # gather details returned from egeria
-            mds_instance = MemberDetailsScreen(payload)
-            self.push_screen(mds_instance)
+            # mds_instance = MemberDetailsScreen(payload)
+            # self.push_screen(mds_instance)
 
-    def on_members_screen_quit_requested(self) -> None:
-        """ Quit the application gracefully with a "good" return code (200) """
-        self.log(f"Quit requested from Members Screen")
-        self.exit(200)
-
-    def on_members_screen_back_requested(self) -> None:
-        """ Quit the application gracefully with a "good" return code (200) """
-        self.log(f"Back requested from Members Screen")
-        self.switch_screen("main_menu")
+    # def on_members_screen_quit_requested(self) -> None:
+    #     """ Quit the application gracefully with a "good" return code (200) """
+    #     self.log(f"Quit requested from Members Screen")
+    #     self.exit(200)
+    #
+    # def on_members_screen_back_requested(self) -> None:
+    #     """ Quit the application gracefully with a "good" return code (200) """
+    #     self.log(f"Back requested from Members Screen")
+    #     self.switch_screen("main_menu")
 
     def on_members_screen_member_details(self, selected_row: dict):
         """ Retrieve members of a collection """
