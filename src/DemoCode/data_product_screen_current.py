@@ -26,43 +26,6 @@ class DataProductScreen(Screen):
         ]
 
     CSS_PATH = ["data_products_css.tcss"]
-    # CSS = """
-    # .connection_info {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 1fr;
-    #     width: 1fr;
-    # }
-    # .title_row {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 1fr;
-    #     width: 1fr;
-    #     align: center middle;
-    # }
-    # .main_content {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 10fr;
-    #     width: 1fr;
-    # }
-    # .action_row {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 2fr;
-    #     width: 1fr;
-    # }
-    # #title {
-    #     align: center middle;
-    # }
-    # #main_menu {
-    #     align: center middle;
-    # }
-    # """
 
     ROWS = [
         ("GUID", "Display Name", "Qualified Name", "Type Name", "Description"),
@@ -82,8 +45,8 @@ class DataProductScreen(Screen):
             self.selected_data = selected_data
 
 
-    def __init__(self, collections):
-        super().__init__()
+    def __init__(self, collections, **kwargs):
+        super().__init__(**kwargs)
         self.collections = collections
         # self.log(f"Data Product Screen init started with data: {collections}")
         self.collection_datatable: DataTable = DataTable()

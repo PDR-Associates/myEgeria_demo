@@ -8,12 +8,12 @@
 import ast
 import os
 
-from textual.screen import Screen
+from textual.screen import Screen, ModalScreen
 from textual import on
-from textual.app import App
+from textual.app import App, ComposeResult
 from textual.message import Message
-from textual.containers import Container
-from textual.widgets import Label, Button, TextArea, Header, Static, Footer
+from textual.containers import Container, ScrollableContainer, Vertical
+from textual.widgets import Label, Button, TextArea, Header, Static, Footer, DataTable
 from demo_service import get_config
 from pyegeria._output_formats import select_output_format_set
 from pyegeria.format_set_executor import exec_format_set
@@ -21,10 +21,10 @@ from src.DemoCode.data_product_screen_current import DataProductScreen
 from src.DemoCode.members_screen_current import MembersScreen
 from src.DemoCode.member_details_screen_current import MemberDetailsScreen
 
+CSS_PATH = ["data_products_css.tcss"]
 
-class SplashScreen(Screen):
+class SplashScreen(ModalScreen):
     """Splash screen with inline styles (no TCSS)."""
-    app: "DataProducts"
 
     class SplashContinue(Message):
         """Message to continue to the login screen."""
@@ -146,11 +146,7 @@ class SplashScreen(Screen):
 class DataProducts(App):
 
     SCREENS = {
-        "splash": SplashScreen,
-        "main_menu": DataProductScreen,
-        "members": MembersScreen,
-        "member_details": MemberDetailsScreen,
-        "_default": DataProductScreen
+        "splash": SplashScreen
     }
 
     CSS_PATH = ["data_products_css.tcss"]
@@ -197,13 +193,43 @@ class DataProducts(App):
         self.log(f"Getting default screen: SplashScreen")
         self.push_screen("splash")
 
+    def compose(self) -> ComposeResult:
+        """Create the layout of the screen."""
+        yield Header(show_clock=True)
+        yield Container(
+            Static(
+                f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}",
+                id="connection_info",
+            )
+        )
+        yield Container(
+            Static("MyEgeria", id="title"),
+            Static("Data Products", id="main_menu"),
+            id = "title_row",
+        )
+        yield ScrollableContainer(
+            Vertical(
+                Static(f"Available Data Product Marketplaces:\n\n", id="before_static"),
+                # self.collection_datatable,
+                Static("\n\nEnd of DataTable", id="after_static"),
+            ),
+            id="main_content")
+        yield Container(
+            Button("Quit", id="quit"),
+            id="action_row",
+        )
+        yield Footer()
+        self.log("done yielding, now waiting for user input")
+
     @on(SplashScreen.SplashContinue)
     def on_splash_screen_splash_continue(self):
         """ Continue received from the Splash Screen"""
-        self.log(f"Continue received from Splash Screen, pushing Data Product Screen")
+        self.log(f"Continue received from Splash Screen, so remove splash screen")
+        self.pop_screen()
         # run the function to retrieve collections data from Egeria
         self.log(f"Retrieving Data Products from Egeria - get_collections_from_egeria")
         # self.get_collections_from_egeria(Egeria_config=self.Egeria_config, Search_str = "*")
+
         try:
             self.collections = [{}]
             response = exec_format_set(
@@ -262,8 +288,64 @@ class DataProducts(App):
         self.log(f"Collections: type: {type(self.collections)}, {len(self.collections)}")
         # Create an instance of the Data Products Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
-        dpinstance: DataProductScreen = DataProductScreen(self.collections)
-        self.push_screen(dpinstance)
+        ROWS = [
+            ("GUID", "Display Name", "Qualified Name", "Type Name", "Description"),
+        ]
+        # dpinstance: DataProductScreen = DataProductScreen(self.collections)
+        # self.push_screen(dpinstance)
+        self.collection_datatable: DataTable = DataTable()
+        # confire the DataTable - collection_datatable
+        self.collection_datatable.id = "collection_datatable"
+        # Add columns to the DataTable
+        self.collection_datatable.add_columns(*DataProductScreen.ROWS[0])
+        # set the cursor to row instead of cell
+        self.collection_datatable.cursor_type = "row"
+        # give the DataTable zebra stripes so it is easier to follow across rows on the screen
+        self.collection_datatable.zebra_stripes = True
+        # log the results of configuring the DataTable
+        # self.log(f"Collection DataTable Created:")
+        # self.log(f"Collection DataTable: {self.collection_datatable.columns}")
+        # Check that we have at least one Data Product Catalogue
+        if self.collections is None:
+            # No Data Product Catalogues found
+            # self.log("No Data Product Catalogues found")
+            self.collection_datatable.add_row("Error", "No Data Product Catalogues found")
+        else:
+            # Load data into the DataTable
+            if type(self.collections) == list:
+                try:
+                    for entry in self.collections:
+                        self.collection_datatable.add_row(
+                            entry.get("Display Name", "None"),
+                            entry.get("Qualified Name", "None"),
+                            entry.get("Type Name", "None"),
+                            entry.get("Description", "None"),
+                        )
+                except Exception as e:
+                    self.collection_datatable.add_row("Error", "Error updating collection list", str(e))
+
+            elif type(self.collections) == dict:
+                try:
+                    self.collection_datatable.add_row(
+                        self.collections.get("Display Name", "None"),
+                        self.collections.get("Qualified Name", "None"),
+                        self.collections.get("Type Name", "None"),
+                        self.collections.get("Description", "None")
+                    )
+                except Exception as e:
+                    self.collection_datatable.add_row("Error", "Error unpacking collection dict", str(e))
+            else:
+                self.collection_datatable.add_row("Error", "Unknown data shape detected", str(type(self.collections)))
+        cfg = get_config()
+        self.view_server = cfg[1]
+        self.platform_url = cfg[0]
+        self.user = cfg[2]
+        self.password = cfg[3]
+        catalog_mounted =self.query_one("#collection_datatable")
+        if not catalog_mounted:
+            self.mount(self.collection_datatable, after="#before_static")
+        else:
+            self.collection_datatable.refresh(layout=True, recompose=True)
 
     def handle_splash_screen_splash_continue(self):
         """Allow direct calls from SplashScreen to continue the app flow."""
@@ -344,8 +426,57 @@ class DataProducts(App):
         self.log(f"Members: type: {type(self.members)}, {len(self.members)}")
         # Create an instance of the Members Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
-        ms_instance = MembersScreen(self.members)
-        self.push_screen(ms_instance)
+        # ms_instance = MembersScreen(self.members)
+        # self.push_screen(ms_instance)
+        ROWS = [
+            ("Qualified Name"),
+        ]
+
+        self.member_datatable: DataTable = DataTable()
+        # Configure the DataTable - member_datatable
+        self.member_datatable.id = "member_datatable"
+        # Add columns to the DataTable
+        self.member_datatable.add_columns(*MembersScreen.ROWS[0])
+        # set the cursor to row instead of cell
+        self.member_datatable.cursor_type = "row"
+        # give the DataTable zebra stripes so it is easier to follow across rows on the screen
+        self.member_datatable.zebra_stripes = True
+        # Check that we have at least one Data Product Catalogue
+        if self.members is None or "There are no members for this collection" in self.members:
+            # No Data Product Catalogues found
+            # self.log("No Data Product Catalogues found")
+            self.member_datatable.add_row("Error, No Data Product Catalogues found")
+        elif type(self.members) is list and "There are no members for this collection" in self.members:
+            # No members found for the collection
+            self.member_datatable.add_row("Error, No members found for this collection")
+        else:
+            # Load data into the DataTable
+            try:
+                for entry in self.members:
+                    qualified_name = entry.get("Qualified Name", "None")
+                    self.member_datatable.add_row(
+                        # entry.get("Qualified Name", "None"),
+                        # entry["Qualified Name"],
+                        qualified_name,
+                    )
+                    # self.log(f"DataTable row added with: {entry['Qualified Name']}")
+            except Exception as e:
+                self.member_datatable.add_row("Error", "Error updating member list", str(e))
+                # self.log(f"Error updating member list: {str(e)}")
+        cfg = get_config()
+        self.view_server = cfg[1]
+        self.platform_url = cfg[0]
+        self.user = cfg[2]
+        self.password = cfg[3]
+        # self.log(f"Refreshing DataTable")
+        collection_mounted = self.query_one("#collection_datatable")
+        if collection_mounted:
+            self.collection_datatable.remove()
+        widget_to_mount = self.query_one("#member_datatable")
+        if not widget_to_mount:
+            self.mount(self.member_datatable, after="after_static")
+        self.member_datatable.refresh(layout=True, recompose=True)
+        # self.log(f"DataTable Refreshed")
 
     def on_members_screen_member_selected(self, selected_row: dict):
         """ Retrieve members of a collection """
@@ -480,8 +611,9 @@ class DataProducts(App):
 
 
 if __name__ == "__main__":
+    app = DataProducts()
     os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
     os.environ.setdefault("EGERIA_VIEW_SERVER", "qs-view-server")
     os.environ.setdefault("EGERIA_USER", "erinoverview")
     os.environ.setdefault("EGERIA_USER_PASSWORD", "secret")
-    DataProducts().run()
+    app.run()
