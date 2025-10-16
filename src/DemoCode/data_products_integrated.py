@@ -139,7 +139,7 @@ class SplashScreen(ModalScreen):
 
     @on(Button.Pressed, "#continue")
     async def continue_to_app(self) -> None:
-        """ Quit button pressed, isssue continue message to app """
+        """ Continue button pressed, issue continue message to app """
         self.log(f"Continue button pressed, app is: {self.app}")
         self.post_message(SplashScreen.SplashContinue())
 
@@ -149,6 +149,11 @@ class DataProducts(App):
     SCREENS = {
         "splash": SplashScreen
     }
+
+    BINDINGS = [
+        ("q", "quit", "Quit"),
+        ("escape", "back", "Back"),
+    ]
 
     CSS_PATH = ["data_products_css.tcss"]
 
@@ -335,11 +340,7 @@ class DataProducts(App):
                     self.collection_datatable.add_row("Error", "Error unpacking collection dict", str(e))
             else:
                 self.collection_datatable.add_row("Error", "Unknown data shape detected", str(type(self.collections)))
-        cfg = get_config()
-        self.view_server = cfg[1]
-        self.platform_url = cfg[0]
-        self.user = cfg[2]
-        self.password = cfg[3]
+
         try:
             catalog_mounted =self.query_one("#collection_datatable")
             if not catalog_mounted:
@@ -354,56 +355,72 @@ class DataProducts(App):
         # Delegate to the standard event handler so logic stays in one place
         self.on_splash_screen_splash_continue()
 
-    @on (Button.Pressed , id="quit")
-    def handle_button_quit_clicked(self):
-        """ Quit the application gracefully with a "good" return code (200) """
-        self.log(f"Quit button clicked")
-        self.exit(200)
+    async def on_button_pressed(self, event: Button.Pressed):
+        if event.button.id == "quit":
+            """ Quit the application gracefully with a "good" return code (200) """
+            self.log(f"Quit button clicked")
+            self.exit(200)
+            return
+        else:
+            self.log(f"Button pressed: {event.button.id}")
+            self.log(f"Unknown button id: {event.button.id}")
+            return
 
-    # def on_data_product_screen_quit_requested(self) -> None:
-    #     """ Quit the application gracefully with a "good" return code (200) """
-    #     self.log(f"Quit requested from Data Product Screen")
-    #     self.exit(200)
-
-    def on_data_product_screen_catalog_selected(self, message: DataProductScreen.CatalogSelected):
-        """ Retrieve members of a collection """
-        self.selected_row = message.selected_data
-        self.log(f"selected_row: {self.selected_row}")
-        # self.selected_guid = self.selected_row.get("GUID"),
-        self.selected_name =message.selected_data["Name"],
-        self.selected_qualified_name = message.selected_data["QName"],
-        self.selected_type = message.selected_data["Type"],
-        self.selected_description = message.selected_data["Desc"],
+    @on(DataTable.RowSelected, "#collection_datatable")
+    def handle_catalog_table_row_selected(self, message: DataTable.RowSelected):
+        self.log(f"Row Selected, Processing selection")
+        self.row_selected = message.row_key
+        self.row_selected_data = self.collection_datatable.get_row(message.row_key)
+        self.selected_name = self.row_selected_data[0] or ""
+        self.selected_qname = self.row_selected_data[1] or ""
+        self.selected_type = self.row_selected_data[2] or ""
+        self.selected_desc = self.row_selected_data[3] or ""
+        # qname = self.selected_qname.split(']')[1].strip('[')
+        # self.selected_qname = qname
         self.members_list: list = []
-        self.log(f"qname: {self.selected_qualified_name}<====")
+        self.log(f"qname: {self.selected_qname}<====")
         response = exec_format_set(
             format_set_name="Digital-Products-MyE",
-            params = {"search_string" : self.selected_qualified_name[0]},
+            params = {"search_string" : str(self.selected_qname)},
             output_format="DICT",
             view_server=self.view_server,
             view_url=self.platform_url,
             user=self.user,
             user_pass=self.password,
         )
+        self.log(f"type: {type(response)}, length: {len(response)}")
         self.log(f"response: {response}")
 
         # Robustly extract data payload from response["data"]. Then populate self.members.
         payload = None
-        if isinstance(response, dict) and "data" in response:
-            value = response["data"]
+        # if isinstance(response, dict) and "data" in response:
+        if isinstance(response, dict):
+            self.log(f"Response from Egeria is a dict")
+            value = response.get("data")
             self.log(f"value: {value}")
-            if isinstance(value, (dict, list)):
-                payload = value
+        elif isinstance(response, list):
+            self.log(f"Response from Egeria is a list")
+            value = response[0].get("data")
+            self.log(f"value: {value}")
+        else:
+            self.log(f"Unexpected response format: {type(response)}")
+            value = response
+
+        if isinstance(value, (dict, list)):
+            payload = value
+            self.log(f"payload: {payload}")
+        elif isinstance(value, str):
+            text = value.strip()
+            self.log(f"text: {text}")
+            # Decode text (ast)
+            try:
+                payload = ast.literal_eval(text)
                 self.log(f"payload: {payload}")
-            elif isinstance(value, str):
-                text = value.strip()
-                self.log(f"text: {text}")
-                # Decode text (ast)
-                try:
-                    payload = ast.literal_eval(text)
-                    self.log(f"payload: {payload}")
-                except Exception:
-                    payload = None
+            except Exception as e:
+                self.log(f"Exception in Egeria response processing: {str(e)}")
+                payload = None
+
+        self.log(f"payload: {type(payload)}")
 
         if payload is None:
             self.log("No parsable data found in response['data']")
@@ -427,15 +444,15 @@ class DataProducts(App):
                 # Unknown shape; keep default empty element and log
                 self.log(f"Unexpected payload type: {type(payload)}")
         if self.members is not None:
+            self.log(f"payload: {payload}, type: {type(payload)}, length: {len(payload)}")
             self.members = payload
         else:
             self.members = ["There are no members for this collection"]
         self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
         self.log(f"Members: type: {type(self.members)}, {len(self.members)}")
-        # Create an instance of the Members Screen and pass it the data retrieved from Egeria
-        # and push it to the top of screen stack to display
-        # ms_instance = MembersScreen(self.members)
-        # self.push_screen(ms_instance)
+
+        # set up the data table
+
         ROWS = [
             ("Qualified Name"),
         ]
@@ -471,11 +488,7 @@ class DataProducts(App):
             except Exception as e:
                 self.member_datatable.add_row("Error", "Error updating member list", str(e))
                 # self.log(f"Error updating member list: {str(e)}")
-        cfg = get_config()
-        self.view_server = cfg[1]
-        self.platform_url = cfg[0]
-        self.user = cfg[2]
-        self.password = cfg[3]
+
         # self.log(f"Refreshing DataTable")
         try:
             collection_mounted = self.query_one("#collection_datatable")
@@ -486,18 +499,25 @@ class DataProducts(App):
                 self.mount(self.member_datatable, after="after_static")
             self.member_datatable.refresh(layout=True, recompose=True)
         except (NoMatches):
-            self.mount(self.member_datatable, after="after_static")
+            self.mount(self.member_datatable, after="#after_static")
         # self.log(f"DataTable Refreshed")
 
-    def on_members_screen_member_selected(self, selected_row: dict):
+    @on(DataTable.RowSelected, "#member_datatable")
+    def handle_member_table_row_selected(self, message: DataTable.RowSelected):
         """ Retrieve members of a collection """
-        self.selected_row = selected_row
-        self.selected_qualified_name = self.selected_row.get("QName")
+        self.selected_row = message.row_key
+        self.selected_data = self.member_datatable.get_row(message.row_key)
+        self.selected_name = self.row_selected_data[0] or ""
+        self.selected_qname = self.row_selected_data[1] or ""
+        self.selected_type = self.row_selected_data[2] or ""
+        self.selected_desc = self.row_selected_data[3] or ""
+        # qname = self.selected_qname.split(']')[1].strip('[')
+        # self.selected_qualified_name = qname
 
         # Retrieve selected Member
         response = exec_format_set(
             format_set_name="Digital-Products-MyE",
-            params={"search_string": self.selected_qualified_name},
+            params={"search_string": self.selected_qname},
             output_format="DICT",
             view_server=self.view_server,
             view_url=self.platform_url,
@@ -554,23 +574,131 @@ class DataProducts(App):
         #     ms_instance = MembersScreen(self.members)
         #     self.push_screen(ms_instance)
         else:
-            self.display_member_details()
-            # Display member details screen
+            self.display_member_details(self.selected_row)
+
+    def display_member_details(self, selected_row):
+        """ Request to display the details for a selected record """
             # gather details returned from egeria
-            # mds_instance = MemberDetailsScreen(payload)
-            # self.push_screen(mds_instance)
+        self.selected_row = selected_row
+        member_details = self.get_member_details(self.selected_row)
 
-    # def on_members_screen_quit_requested(self) -> None:
-    #     """ Quit the application gracefully with a "good" return code (200) """
-    #     self.log(f"Quit requested from Members Screen")
-    #     self.exit(200)
-    #
-    # def on_members_screen_back_requested(self) -> None:
-    #     """ Quit the application gracefully with a "good" return code (200) """
-    #     self.log(f"Back requested from Members Screen")
-    #     self.switch_screen("main_menu")
+        inner_dn = inner_qn = inner_c = inner_d = inner_s = inner_tn = ""
+        inner_cm = ""
+        if member_details is None:
+            # no input provided, set to empty list
+            member_details = []
+        elif isinstance(member_details, list):
+            # input is list
+            self.log(f"Member Details input is a list: {member_details}")
+        elif isinstance(member_details, dict):
+            # input is dict
+            self.log(f"Member Details input is a dict: {member_details}")
+            inner_dn = member_details.get("Display Name") if "Display Name" in member_details else None
+            inner_qn = member_details.get("Qualified Name") if "Qualified Name" in member_details else None
+            inner_c = member_details.get("Categories") if "Categories" in member_details else None
+            inner_d = member_details.get("Description") if "Description" in member_details else None
+            inner_s = member_details.get("Status") if "Status" in member_details else None
+            inner_tn = member_details.get("Type Name") if "Type Name" in member_details else None
+            inner_cm = member_details.get("Containing Members") if "Containing Members" in member_details else None
+            if isinstance(inner_cm, list):
+                self.containing_members = inner_cm
+                self.log(
+                    f"members after extraction: {type(self.containing_members)} len={len(self.containing_members)}")
+            else:
+                self.containing_members = None
+        else:
+            # Unknown shape of input to member details screen, setting to emply list
+            self.log(f"Member Details input is not a list or dict: {member_details}")
+            member_details = []
+        # self.log(f"Member Details Screen init started with data: {member_details}")
+        self.member_details_datatable: DataTable = DataTable()
+        # confire the DataTable - member_datatable
+        self.member_details_datatable.id = "member_datatable"
+        # Add columns to the DataTable
+        self.member_details_datatable.add_columns(*MemberDetailsScreen.ROWS[0])
+        # set the cursor to row instead of cell
+        self.member_details_datatable.cursor_type = "row"
+        # give the DataTable zebra stripes so it is easier to follow across rows on the screen
+        self.member_details_datatable.zebra_stripes = True
+        # log the results of configuring the DataTable
+        # self.log(f"Member Details DataTable Created:")
+        # self.log(f"Member Details DataTable: {self.member_details_datatable.columns}")
+        # Check that we have at least one Data Product Catalogue
+        if member_details is None:
+            # No Data Product Catalogues found
+            # self.log("No Data Product Catalogues found")
+            self.member_details_datatable.add_row("Error, No Data Product Catalogues found")
+        elif type(member_details) is list and len(member_details) == 0:
+            self.member_details_datatable.add_row("Error, No Data Product Catalogues found")
+        else:
+            # Load data into the DataTable
+            try:
+                for entry in member_details:
+                    self.member_details_datatable.add_row(
+                        inner_dn,
+                        inner_qn,
+                        inner_c,
+                        inner_d,
+                        inner_s,
+                        inner_tn,
+                        self.containing_members
+                    )
+            except Exception as e:
+                self.member_details_datatable.add_row("Error", "Error updating member list", str(e))
 
-    def on_members_screen_member_details(self, selected_row: dict):
+        self.member_details_datatable.refresh(layout=True, recompose=True)
+
+
+    def process_members(self):
+        """ Process the members of a collection """
+        self.log(f"Processing members of collection: {self.selected_name}")
+        self.log(f"Selected qualified name: {self.selected_qualified_name}")
+        try:
+            self.member_datatable = self.query_one("#member_datatable").remove()
+            self.member_datatable: DataTable = DataTable()
+        except(NoMatches):
+            self.log(f"No DataTable found")
+            self.member_datatable: DataTable = DataTable()
+        # Configure the DataTable - member_datatable
+        self.member_datatable.id = "member_datatable"
+        # Add columns to the DataTable
+        self.member_datatable.add_columns(*MembersScreen.ROWS[0])
+        # set the cursor to row instead of cell
+        self.member_datatable.cursor_type = "row"
+        # give the DataTable zebra stripes so it is easier to follow across rows on the screen
+        self.member_datatable.zebra_stripes = True
+        # Check that we have at least one Data Product Catalogue
+        if self.members is None or "There are no members for this collection" in self.members:
+            # No Data Product Catalogues found
+            # self.log("No Data Product Catalogues found")
+            self.member_datatable.add_row("Error, No Data Product Catalogues found")
+        elif type(self.members) is list and "There are no members for this collection" in self.members:
+            # No members found for the collection
+            self.member_datatable.add_row("Error, No members found for this collection")
+        else:
+            # Load data into the DataTable
+            try:
+                for entry in self.members:
+                    self.member_datatable.add_row(
+                        # entry.get("Qualified Name", "None"),
+                        entry["Qualified Name"],
+                    )
+                    # self.log(f"DataTable row added with: {entry['Qualified Name']}")
+            except Exception as e:
+                self.member_datatable.add_row("Error", "Error updating member list", str(e))
+                # self.log(f"Error updating member list: {str(e)}")
+        try:
+            collection_mounted = self.query_one("#collection_datatable")
+            if collection_mounted:
+                self.collection_datatable.remove()
+            widget_to_mount = self.query_one("#member_datatable")
+            if not widget_to_mount:
+                self.mount(self.member_datatable, after="#after_static")
+            self.member_datatable.refresh(layout=True, recompose=True)
+        except (NoMatches):
+            self.mount(self.member_datatable, after="#after_static")
+
+    def get_member_details(self, selected_row) -> list:
         """ Retrieve members of a collection """
         self.selected_row = selected_row
         self.selected_qualified_name = self.selected_row.get("QName")
@@ -607,20 +735,13 @@ class DataProducts(App):
 
         if payload is None:
             self.log(f"No parsable data found in response from Egeria{response['data']}")
-        # Create an instance of the Member Details Screen and pass it the data retrieved from Egeria
-        # and push it to the top of screen stack to display
-        mds_instance = MemberDetailsScreen(payload)
-        self.push_screen(mds_instance)
 
-    def on_member_details_screen_quit_requested(self) -> None:
-        """ Quit the application gracefully with a "good" return code (200) """
-        self.log(f"Quit requested from Members Screen")
-        self.push_screen("main_menu")
+        return payload
 
-    def on_member_details_screen_back_requested(self) -> None:
-        """ Quit the application gracefully with a "good" return code (200) """
-        self.log(f"Back requested from Members Screen")
-        self.pop_screen()
+    async def action_back(self) -> None:
+    #     """ Return to the Display Available Catalogs display """
+        self.log(f"Back requested")
+        self.on_splash_screen_splash_continue()
 
 
 if __name__ == "__main__":

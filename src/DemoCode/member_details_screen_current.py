@@ -26,43 +26,6 @@ class MemberDetailsScreen(Screen):
         ]
 
     CSS_PATH = ["data_products_css.tcss"]
-    # CSS = """
-    # .connection_info {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 1fr;
-    #     width: 1fr;
-    # }
-    # .title_row {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 1fr;
-    #     width: 1fr;
-    #     align: center middle;
-    # }
-    # .main_content {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 10fr;
-    #     width: 1fr;
-    # }
-    # .action_row {
-    #     background: $panel;
-    #     color: $text;
-    #     border: round $primary;
-    #     height: 2fr;
-    #     width: 1fr;
-    # }
-    # #title {
-    #     align: center middle;
-    # }
-    # #main_menu {
-    #     align: center middle;
-    # }
-    # """
 
     ROWS = [
         ("Display Name", "Qualified Name", "Category", "Description", "Status", "Type Name", "Containing Members"),
