@@ -16,11 +16,21 @@ from textual.message import Message
 from textual.containers import Container, ScrollableContainer, Vertical
 from textual.widgets import Label, Button, TextArea, Header, Static, Footer, DataTable
 from demo_service import get_config
-from pyegeria._output_formats import select_output_format_set
 from pyegeria.format_set_executor import exec_format_set
-from src.DemoCode.data_product_screen_current import DataProductScreen
-from src.DemoCode.members_screen_current import MembersScreen
 from src.DemoCode.member_details_screen_current import MemberDetailsScreen
+from pyegeria._output_format_models import (
+    Column,
+    Format,
+    ActionParameter,
+    FormatSet)
+from pyegeria._output_formats import (
+    output_format_sets,
+    select_output_format_set,
+    output_format_set_list,
+    get_output_format_set_heading,
+    get_output_format_set_description,
+    get_output_format_type_match
+)
 
 CSS_PATH = ["data_products_css.tcss"]
 
@@ -194,6 +204,39 @@ class DataProducts(App):
             self.log(f"Error connecting to PyEgeria: {str(e)}")
             self.exit(400)
 
+            # Create a custom output-format-set for browsing the Catalog structures
+            # without regard to the specific type of an entry
+        columns = [
+            Column(name="Display Name", key="display_name"),
+            Column(name="Description", key="description", format=True),
+            Column(name="Type Name", key="type_name"),
+            Column(name="Status", key="status"),
+            ]
+        MyE_format = Format(
+            types=["DICT"],
+            columns=columns
+            )
+        explorer_format_set = FormatSet(
+            heading="Explore-Structure-Format-Set",
+            description="A custom format set for exploring Catalog Structures",
+            aliases=["Catalog Explorer"],
+            formats=[MyE_format],
+            action=ActionParameter(
+                function="CollectionManager.find_collections",
+                required_params=["search_string"],
+                spec_params={},
+            ),
+            get_additional_props=ActionParameter(
+                function="CollectionManager._extract_digital_product_catalog_properties",
+                required_params=[],
+                spec_params={},
+            )
+            )
+
+        output_format_sets["ExploreStructure"] = explorer_format_set
+
+        explorer_set = select_output_format_set("ExploreStructure", "DICT")
+
     def on_mount(self):
         self.log(f"on_mount event triggered")
         self.log(f"Getting default screen: SplashScreen")
@@ -233,7 +276,9 @@ class DataProducts(App):
         # run the function to retrieve collections data from Egeria
         self.log(f"Retrieving Data Products from Egeria - get_collections_from_egeria")
         # self.get_collections_from_egeria(Egeria_config=self.Egeria_config, Search_str = "*")
+        self.refresh_main_screen()
 
+    def refresh_main_screen(self):
         try:
             self.collections = [{}]
             response = exec_format_set(
@@ -290,25 +335,23 @@ class DataProducts(App):
             self.log(f"Error connecting to Egeria: {str(e)}")
             self.collections = [{"Egeria Error": str(e)}]
         self.log(f"Collections: type: {type(self.collections)}, {len(self.collections)}")
-        # Create an instance of the Data Products Screen and pass it the data retrieved from Egeria
-        # and push it to the top of screen stack to display
-        ROWS = [
-            ("GUID", "Display Name", "Qualified Name", "Type Name", "Description"),
-        ]
-        # dpinstance: DataProductScreen = DataProductScreen(self.collections)
-        # self.push_screen(dpinstance)
+
         self.collection_datatable: DataTable = DataTable()
-        # confire the DataTable - collection_datatable
+        # configure the DataTable - collection_datatable
         self.collection_datatable.id = "collection_datatable"
-        # Add columns to the DataTable
-        self.collection_datatable.add_columns(*DataProductScreen.ROWS[0])
+        # Add columns with keys to the DataTable
+        # self.collection_datatable.add_columns(*DataProductScreen.ROWS[0])
+        self.collection_datatable.add_columns(
+            ("Display Name", "dn_key"),
+            ("Qualified Name", "qn_key"),
+            ("Type Name", "tn_key"),
+            ("Description", "desc_key")
+            )
+
         # set the cursor to row instead of cell
         self.collection_datatable.cursor_type = "row"
         # give the DataTable zebra stripes so it is easier to follow across rows on the screen
         self.collection_datatable.zebra_stripes = True
-        # log the results of configuring the DataTable
-        # self.log(f"Collection DataTable Created:")
-        # self.log(f"Collection DataTable: {self.collection_datatable.columns}")
         # Check that we have at least one Data Product Catalogue
         if self.collections is None:
             # No Data Product Catalogues found
@@ -375,93 +418,77 @@ class DataProducts(App):
         self.selected_qname = self.row_selected_data[1] or ""
         self.selected_type = self.row_selected_data[2] or ""
         self.selected_desc = self.row_selected_data[3] or ""
-        # qname = self.selected_qname.split(']')[1].strip('[')
-        # self.selected_qname = qname
+
         self.members_list: list = []
         self.log(f"qname: {self.selected_qname}<====")
-        response = exec_format_set(
-            format_set_name="Digital-Products-MyE",
-            params = {"search_string" : str(self.selected_qname)},
-            output_format="DICT",
-            view_server=self.view_server,
-            view_url=self.platform_url,
-            user=self.user,
-            user_pass=self.password,
-        )
-        self.log(f"type: {type(response)}, length: {len(response)}")
-        self.log(f"response: {response}")
+        try:
+            response = exec_format_set(
+                format_set_name="Digital-Product-Catalog-MyE",
+                params = {"search_string" : str(self.selected_qname)},
+                output_format="DICT",
+                view_server=self.view_server,
+                view_url=self.platform_url,
+                user=self.user,
+                user_pass=self.password,
+            )
+            self.log(f"type: {type(response)}, length: {len(response)}")
+            self.log(f"response: {response}")
 
-        # Robustly extract data payload from response["data"]. Then populate self.members.
-        payload = None
-        # if isinstance(response, dict) and "data" in response:
-        if isinstance(response, dict):
-            self.log(f"Response from Egeria is a dict")
-            value = response.get("data")
-            self.log(f"value: {value}")
-        elif isinstance(response, list):
-            self.log(f"Response from Egeria is a list")
-            value = response[0].get("data")
-            self.log(f"value: {value}")
-        else:
-            self.log(f"Unexpected response format: {type(response)}")
-            value = response
+            payload = None
+            if isinstance(response, dict) and "data" in response:
+                value = response["data"]
+                self.log(f"value: {value}")
+                if isinstance(value, (dict, list)):
+                    payload = value
+                    self.log(f"payload: {payload}")
+                elif isinstance(value, str):
+                    text = value.strip()
+                    self.log(f"text: {text}")
+                    # Decode text (ast)
+                    try:
+                        payload = ast.literal_eval(text)
+                        self.log(f"payload: {payload}")
+                    except Exception:
+                        payload = None
 
-        if isinstance(value, (dict, list)):
-            payload = value
-            self.log(f"payload: {payload}")
-        elif isinstance(value, str):
-            text = value.strip()
-            self.log(f"text: {text}")
-            # Decode text (ast)
-            try:
-                payload = ast.literal_eval(text)
-                self.log(f"payload: {payload}")
-            except Exception as e:
-                self.log(f"Exception in Egeria response processing: {str(e)}")
-                payload = None
-
-        self.log(f"payload: {type(payload)}")
-
-        if payload is None:
-            self.log("No parsable data found in response['data']")
-            self.members = None
-        else:
-            # Ensure self.members becomes a list of dicts for downstream UI
-            if isinstance(payload, list):
-                self.members = payload
-                self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
-            elif isinstance(payload, dict):
-                # If the dict wraps the actual list of members under a known key, unwrap it
-                inner = payload.get("members") if "members" in payload else None
-                self.log(f"inner: {inner}")
-                if isinstance(inner, list):
-                    self.members = inner
-                    self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
-                else:
-                    self.members = [payload]
-                    self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
+            if payload is None:
+                self.log("No parsable data found in response['data']")
             else:
-                # Unknown shape; keep default empty element and log
-                self.log(f"Unexpected payload type: {type(payload)}")
-        if self.members is not None:
-            self.log(f"payload: {payload}, type: {type(payload)}, length: {len(payload)}")
+                # Ensure self.members becomes a list of dicts for downstream UI
+                if isinstance(payload, list):
+                    self.members = payload
+                    self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
+                elif isinstance(payload, dict):
+                    # If the dict wraps the actual list of members under a known key, unwrap it
+                    inner = payload.get("members") if "members" in payload else None
+                    self.log(f"inner: {inner}")
+                    if isinstance(inner, list):
+                        self.members = inner
+                        self.log(f"collections after extraction: {type(self.members)} len={len(self.members)}")
+                    else:
+                        self.members = [payload]
+                        self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
+                else:
+                    # Unknown shape; keep default empty element and log
+                    self.log(f"Unexpected payload type: {type(payload)}")
             self.members = payload
-        else:
-            self.members = ["There are no members for this collection"]
-        self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
+            self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
+
+        except Exception as e:
+            self.log(f"Error connecting to Egeria: {str(e)}")
+            self.collections = [{"Egeria Error": str(e)}]
+
+
         self.log(f"Members: type: {type(self.members)}, {len(self.members)}")
 
         # set up the data table
-
-        ROWS = [
-            ("Qualified Name"),
-        ]
 
         self.member_datatable: DataTable = DataTable()
         # Configure the DataTable - member_datatable
         self.member_datatable.id = "member_datatable"
         # Add columns to the DataTable
-        self.member_datatable.add_columns(*MembersScreen.ROWS[0])
+        # self.member_datatable.add_columns(*MembersScreen.ROWS[0])
+        self.member_datatable.add_columns( "Qualified Name","Display Name", "Type Name", "Status", "Description")
         # set the cursor to row instead of cell
         self.member_datatable.cursor_type = "row"
         # give the DataTable zebra stripes so it is easier to follow across rows on the screen
@@ -477,19 +504,78 @@ class DataProducts(App):
         else:
             # Load data into the DataTable
             try:
-                for entry in self.members:
-                    qualified_name = entry.get("Qualified Name", "None")
-                    self.member_datatable.add_row(
-                        # entry.get("Qualified Name", "None"),
-                        # entry["Qualified Name"],
-                        qualified_name,
-                    )
-                    # self.log(f"DataTable row added with: {entry['Qualified Name']}")
+                if type(self.members) is list:
+                    self.member_instance = self.members[0]
+                    self.log(f"members after extraction: {type(self.member_instance)} len={len(self.member_instance)}")
+                elif type(self.members is dict):
+                    self.member_work = self.members.get("data")
+                    self_member_instance = self.member_work[0]["members", None]
+                    self.log(f"members after extraction: {type(self.member_instance)}, {self.member_instance}")
+                else:
+                    self.log(f"Unexpected Shape - self.members: {type(self.members)}")
+                    self.member_instance = self.members.get("members", None)
+                for entry in self.member_instance:
+                    self.log(f"entry: {entry}")
+                    qualified_name = self.selected_qname
+                    self.log(f"qualified_name: {qualified_name}")
+                    try:
+                        member_data: dict = exec_format_set(
+                            format_set_name="ExploreStructure",
+                            params={"search_string": str(qualified_name)},
+                            output_format="DICT",
+                            view_server=self.view_server,
+                            view_url=self.platform_url,
+                            user=self.user,
+                            user_pass=self.password,
+                            )
+                        self.log(f"from explorer set member_data: {member_data}")
+                    except Exception as e:
+                        self.log(f"Exception in Egeria response processing: {str(e)}")
+                        member_data = {}
+                    if member_data:
+                        self.log(f" found member_data: {member_data}")
+                        for entry in member_data:
+                            # extract the data area from the response
+                            value: list = entry["data"]
+                            value2: dict = value[0]
+                            self.log(f"value: {value}")
+                            self.log(f"value2: {value2}")
+                            # # if it is not a DICT structure skip to the next iteration (if any)
+                            # if not isinstance(value2, dict):
+                            #     continue
+                            # otherwise extract the attributes from the data structure
+                            dname = value2.get("Display Name", None)
+                            tname = value2.get("Type Name", None)
+                            desc = value2.get("Description", None)
+                            stat = value2.get("Status", None)
+                            self.member_datatable.add_row(
+                                qualified_name,
+                                dname,
+                                tname,
+                                stat,
+                                desc
+                            )
+                            self.log(f"member_data row added: {member_data}")
+                            self.log(f"Extracted: {dname}, {tname}, {desc}, {stat}")
+                            continue
+                    else:
+                        self.log(f"no member data found: {member_data}")
+                        dname = None
+                        tname = None
+                        desc = None
+                        stat = None
+                        self.member_datatable.add_row(
+                            qualified_name,
+                            dname,
+                            tname,
+                            stat,
+                            desc
+                        )
+                        self.log(f" No member_data empty (None) row added")
+                        continue
             except Exception as e:
                 self.member_datatable.add_row("Error", "Error updating member list", str(e))
-                # self.log(f"Error updating member list: {str(e)}")
-
-        # self.log(f"Refreshing DataTable")
+                self.log(f"Error updating member list: {str(e)}")
         try:
             collection_mounted = self.query_one("#collection_datatable")
             if collection_mounted:
@@ -511,8 +597,6 @@ class DataProducts(App):
         self.selected_qname = self.row_selected_data[1] or ""
         self.selected_type = self.row_selected_data[2] or ""
         self.selected_desc = self.row_selected_data[3] or ""
-        # qname = self.selected_qname.split(']')[1].strip('[')
-        # self.selected_qualified_name = qname
 
         # Retrieve selected Member
         response = exec_format_set(
@@ -662,7 +746,11 @@ class DataProducts(App):
         # Configure the DataTable - member_datatable
         self.member_datatable.id = "member_datatable"
         # Add columns to the DataTable
-        self.member_datatable.add_columns(*MembersScreen.ROWS[0])
+        self.member_datatable.add_columns(
+            ("Qualified Name"),
+            ("Display Name"),
+            ("Type Name"),
+        )
         # set the cursor to row instead of cell
         self.member_datatable.cursor_type = "row"
         # give the DataTable zebra stripes so it is easier to follow across rows on the screen
@@ -682,6 +770,8 @@ class DataProducts(App):
                     self.member_datatable.add_row(
                         # entry.get("Qualified Name", "None"),
                         entry["Qualified Name"],
+                        entry["Display Name"],
+                        entry["Type Name"],
                     )
                     # self.log(f"DataTable row added with: {entry['Qualified Name']}")
             except Exception as e:
@@ -735,16 +825,29 @@ class DataProducts(App):
 
         if payload is None:
             self.log(f"No parsable data found in response from Egeria{response['data']}")
-
+            payload = ["No parsable data found in response from Egeria"]
         return payload
 
     async def action_back(self) -> None:
     #     """ Return to the Display Available Catalogs display """
         self.log(f"Back requested")
-        self.on_splash_screen_splash_continue()
-
+        self.refresh_main_screen()
 
 if __name__ == "__main__":
+    try:
+        import pydevd_pycharm
+        pydevd_pycharm.settrace(
+            "127.0.0.1",  # Ensure it's localhost since your app runs on the same machine as PyCharm
+            port=5679,  # Choose an available port
+            stdout_to_server=True,
+            stderr_to_server=True,
+            suspend=False  # Set to False to let the application continue running after starting
+            )
+    except ImportError:
+        print("pydevd-pycharm not installed or setup failed. Debugger won't be active.")
+    except Exception as e:
+        pass
+
     app = DataProducts()
     os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
     os.environ.setdefault("EGERIA_VIEW_SERVER", "qs-view-server")
