@@ -9,11 +9,13 @@ import ast
 import os
 
 from textual.css.query import NoMatches
+from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual import on
 from textual.app import App, ComposeResult
 from textual.message import Message
 from textual.containers import Container, ScrollableContainer, Vertical
+from textual.widget import Widget
 from textual.widgets import Label, Button, TextArea, Header, Static, Footer, DataTable
 from demo_service import get_config
 from pyegeria.format_set_executor import exec_format_set
@@ -258,7 +260,7 @@ class DataProducts(App):
         )
         yield ScrollableContainer(
             Vertical(
-                Static(f"Available Data Product Marketplaces:\n\n", id="before_static"),
+                Static(f"Available Data Product Marketplaces:\n\n", id="before_static", expand=True, shrink=True),
                 Static("\n\nEnd of DataTable", id="after_static"),
             ),
             id="main_content")
@@ -293,48 +295,19 @@ class DataProducts(App):
 
             # Robustly extract data payload from response["data"]. Then populate self.collections.
             payload = None
-            if isinstance(response, dict) and "data" in response:
-                value = response["data"]
-                self.log(f"value: {value}")
-                if isinstance(value, (dict, list)):
-                    payload = value
-                    self.log(f"payload: {payload}")
-                elif isinstance(value, str):
-                    text = value.strip()
-                    self.log(f"text: {text}")
-                    # Decode text (ast)
-                    try:
-                        payload = ast.literal_eval(text)
-                        self.log(f"payload: {payload}")
-                    except Exception:
-                        payload = None
+            if isinstance(response, dict) or isinstance(response, list):
+                payload = self.unpack_egeria_data(response)
 
-            if payload is None:
+            if not payload:
                 self.log("No parsable data found in response['data']")
-            else:
-                # Ensure self.collections becomes a list of dicts for downstream UI
-                if isinstance(payload, list):
-                    self.collections = payload
-                    self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
-                elif isinstance(payload, dict):
-                    # If the dict wraps the actual list of collections under a known key, unwrap it
-                    inner = payload.get("collections") if "collections" in payload else None
-                    self.log(f"inner: {inner}")
-                    if isinstance(inner, list):
-                        self.collections = inner
-                        self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
-                    else:
-                        self.collections = [payload]
-                        self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
-                else:
-                    # Unknown shape; keep default empty element and log
-                    self.log(f"Unexpected payload type: {type(payload)}")
+                payload = [{"NoData": "No parsable data found in response"}]
+
             self.collections = payload
             self.log(f"collections after extraction: {type(self.collections)} len={len(self.collections)}")
+
         except Exception as e:
             self.log(f"Error connecting to Egeria: {str(e)}")
             self.collections = [{"Egeria Error": str(e)}]
-        self.log(f"Collections: type: {type(self.collections)}, {len(self.collections)}")
 
         self.collection_datatable: DataTable = DataTable()
         # configure the DataTable - collection_datatable
@@ -359,31 +332,56 @@ class DataProducts(App):
             self.collection_datatable.add_row("Error", "No Data Product Catalogues found")
         else:
             # Load data into the DataTable
-            if type(self.collections) == list:
-                try:
-                    for entry in self.collections:
+            try:
+                for entry in self.collections:
+                    if "unknown" in entry:
                         self.collection_datatable.add_row(
-                            entry.get("Display Name", "None"),
-                            entry.get("Qualified Name", "None"),
-                            entry.get("Type Name", "None"),
-                            entry.get("Description", "None"),
+                            # entry.get("error"),
+                            # entry.get("unknown")
+                            entry
+                            )
+                        continue
+                    elif "shape" in entry:
+                        self.collection_datatable.add_row(
+                            # entry.get("error"),
+                            # entry.get("shape")
+                            entry
                         )
-                except Exception as e:
-                    self.collection_datatable.add_row("Error", "Error updating collection list", str(e))
-
-            elif type(self.collections) == dict:
-                try:
-                    self.collection_datatable.add_row(
-                        self.collections.get("Display Name", "None"),
-                        self.collections.get("Qualified Name", "None"),
-                        self.collections.get("Type Name", "None"),
-                        self.collections.get("Description", "None")
-                    )
-                except Exception as e:
-                    self.collection_datatable.add_row("Error", "Error unpacking collection dict", str(e))
-            else:
-                self.collection_datatable.add_row("Error", "Unknown data shape detected", str(type(self.collections)))
-
+                        continue
+                    elif "Egeria Error" in entry:
+                        self.collection_datatable.add_row(
+                            # entry.get("Egeria Error")
+                            entry
+                        )
+                        continue
+                    elif "error" in entry:
+                        self.collection_datatable.add_row(
+                            # entry.get("error")
+                            entry
+                        )
+                        continue
+                    else:
+                        if isinstance(entry, dict):
+                            self.collection_datatable.add_row(
+                                entry.get("Display Name", "None"),
+                                entry.get("Qualified Name", "None"),
+                                entry.get("Type Name", "None"),
+                                entry.get("Description", "None")
+                            )
+                        elif isinstance(entry, list):
+                            for item in entry:
+                                self.collection_datatable.add_row(
+                                    item.get("Display Name", "None"),
+                                    item.get("Qualified Name", "None"),
+                                    item.get("Type Name", "None"),
+                                    item.get("Description", "None")
+                                    )
+                        else:
+                            self.collection_datatable.add_row(
+                                entry
+                            )
+            except Exception as e:
+                self.collection_datatable.add_row("Error", "Error unpacking collection dict", str(e))
         try:
             catalog_mounted =self.query_one("#collection_datatable")
             if not catalog_mounted:
@@ -414,72 +412,111 @@ class DataProducts(App):
         self.log(f"Row Selected, Processing selection")
         self.row_selected = message.row_key
         self.row_selected_data = self.collection_datatable.get_row(message.row_key)
-        self.selected_name = self.row_selected_data[0] or ""
-        self.selected_qname = self.row_selected_data[1] or ""
-        self.selected_type = self.row_selected_data[2] or ""
-        self.selected_desc = self.row_selected_data[3] or ""
-
-        self.members_list: list = []
+        self.selected_name = str(self.row_selected_data[0] or "")
+        self.selected_qname = str(self.row_selected_data[1] or "")
+        self.selected_type = str(self.row_selected_data[2] or "")
+        self.selected_desc = str(self.row_selected_data[3] or "")
+        self.member_list: list = []
         self.log(f"qname: {self.selected_qname}<====")
+
+        payload: list = []
+        payload.clear()
+
         try:
+            self.log(f"selected qualified name = {self.selected_qname}<====, type: {type(self.selected_qname)}")
             response = exec_format_set(
                 format_set_name="Digital-Product-Catalog-MyE",
-                params = {"search_string" : str(self.selected_qname)},
+                params = {"search_string" : self.selected_qname},
                 output_format="DICT",
                 view_server=self.view_server,
                 view_url=self.platform_url,
                 user=self.user,
                 user_pass=self.password,
             )
-            self.log(f"type: {type(response)}, length: {len(response)}")
             self.log(f"response: {response}")
+            if isinstance(response, dict) or isinstance(response, list):
+                oneinstance = self.unpack_egeria_data(response)
+                payload = oneinstance
+                self.log(f"payload: {payload}")
 
-            payload = None
-            if isinstance(response, dict) and "data" in response:
-                value = response["data"]
-                self.log(f"value: {value}")
-                if isinstance(value, (dict, list)):
-                    payload = value
-                    self.log(f"payload: {payload}")
-                elif isinstance(value, str):
-                    text = value.strip()
-                    self.log(f"text: {text}")
-                    # Decode text (ast)
-                    try:
-                        payload = ast.literal_eval(text)
-                        self.log(f"payload: {payload}")
-                    except Exception:
-                        payload = None
+            if not payload:
+                self.log("No parsable data found in response from Egeria")
+                payload = [{"error": "No parsable data found in response from Egeria"}]
 
-            if payload is None:
-                self.log("No parsable data found in response['data']")
-            else:
-                # Ensure self.members becomes a list of dicts for downstream UI
-                if isinstance(payload, list):
-                    self.members = payload
-                    self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
-                elif isinstance(payload, dict):
-                    # If the dict wraps the actual list of members under a known key, unwrap it
-                    inner = payload.get("members") if "members" in payload else None
-                    self.log(f"inner: {inner}")
-                    if isinstance(inner, list):
-                        self.members = inner
-                        self.log(f"collections after extraction: {type(self.members)} len={len(self.members)}")
+            for entry in payload:
+                if isinstance(entry, dict) and len(entry) > 0:
+                    if  entry.get("Containing Members") is not None:
+                        member = entry.get("Containing Members")
+                        self.log(f"member variable: {member}, type: {type(member)}")
+                        split_members = member.split(",")
+                        self.log(f"split_members: {split_members}, type: {type(split_members)}")
+                        self.member_list.extend(split_members)
+                        self.log(f"member_list: {self.member_list}, type: {type(self.member_list)}")
+                        continue
                     else:
-                        self.members = [payload]
-                        self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
+                        self.member_list.append({"error": "no Containing Members"})
+                        continue
                 else:
-                    # Unknown shape; keep default empty element and log
-                    self.log(f"Unexpected payload type: {type(payload)}")
-            self.members = payload
-            self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
-
+                    if isinstance(entry, list):
+                        for member in entry:
+                            if isinstance(member, dict) and member.get("Containing Members") is not None:
+                                self.log(f"member is a dict and has containing members")
+                                if isinstance(member.get("Containing Members"), list):
+                                    member_ext = member.get("Containing Members")
+                                    self.log(f"member variable: {member_ext}, type: {type(member_ext)}")
+                                    split_members = member_ext.split(",")
+                                    self.log(f"split_members: {split_members}, type: {type(split_members)}")
+                                    self.member_list.extend(split_members)
+                                    self.log(f"member_list: {self.member_list}, type: {type(self.member_list)}")
+                                    continue
+                                else:
+                                    if isinstance(member.get("Containing Members"), str):
+                                        item_string = member.get("Containing Members")
+                                        self.log(f"member variable: {item_string}, type: {type(item_string)}")
+                                        split_members = item_string.split(",")
+                                        self.log(f"split_members: {split_members}, type: {type(split_members)}")
+                                        self.member_list.extend(split_members)
+                                        self.log(f"member_list: {self.member_list}, type: {type(self.member_list)}")
+                                        continue
+                            elif isinstance(member, dict) and member.get("Containing Members") is None:
+                                self.member_list.append({"error": "no Containing Members"})
+                                self.log(f"member is a dict and has no containing members")
+                                continue
+                            else:
+                                if isinstance(member, list):
+                                    self.log(f"member is a list")
+                                    for item in member:
+                                        if isinstance(item, dict) and item.get("Containing Members") is not None:
+                                            self.log(f"item inside a list is a dict and has containing members")
+                                            if isinstance(item.get("Containing Members"), list):
+                                                for items in item.get("Containing Members"):
+                                                    self.log(f"containing members contains a list")
+                                                    self.member_list.append(items)
+                                            else:
+                                                if isinstance(item.get("Containing Members"), str):
+                                                    item_string = item.get("Containing Members")
+                                                    self.log(f"containing members contains a string")
+                                                    split_list = ast.literal_eval(item_string)
+                                                    self.log(f"literal_eval of member_list: {split_list}")
+                                                    if isinstance(split_list, list):
+                                                        self.member_list.extend(split_list)
+                                                    else:
+                                                        self.member_list.append(split_list)
+                                                    self.log(f" Members after split: {type(self.member_list)}, {self.member_list}")
+                                                else:
+                                                    self.member_list.append({"error": "unknown inner data structure"})
+                                            continue
+                                        else:
+                                            self.member_list.append({"error": "unknown inner data structure"})
+                                else:
+                                    self.member_list.append({"error": "unknown inner data structure"})
+                                    continue
+                    else:
+                        self.member_list.append({"error": "unknown outer data structure"})
+                        continue
         except Exception as e:
             self.log(f"Error connecting to Egeria: {str(e)}")
-            self.collections = [{"Egeria Error": str(e)}]
-
-
-        self.log(f"Members: type: {type(self.members)}, {len(self.members)}")
+            self.member_list = [{"Egeria Error": str(e)}]
 
         # set up the data table
 
@@ -494,30 +531,23 @@ class DataProducts(App):
         # give the DataTable zebra stripes so it is easier to follow across rows on the screen
         self.member_datatable.zebra_stripes = True
         # Check that we have at least one Data Product Catalogue
-        if self.members is None or "There are no members for this collection" in self.members:
+        if self.member_list is None or "There are no members for this collection" in self.member_list:
             # No Data Product Catalogues found
             # self.log("No Data Product Catalogues found")
-            self.member_datatable.add_row("Error, No Data Product Catalogues found")
-        elif type(self.members) is list and "There are no members for this collection" in self.members:
+            self.member_datatable.add_row("Error", "No Data Product Catalogues found")
+        elif type(self.member_list) is list and "There are no members for this collection" in self.member_list:
             # No members found for the collection
-            self.member_datatable.add_row("Error, No members found for this collection")
+            self.member_datatable.add_row("Error", "No members found for this collection")
         else:
             # Load data into the DataTable
             try:
-                if type(self.members) is list:
-                    self.member_instance = self.members[0]
-                    self.log(f"members after extraction: {type(self.member_instance)} len={len(self.member_instance)}")
-                elif type(self.members is dict):
-                    self.member_work = self.members.get("data")
-                    self_member_instance = self.member_work[0]["members", None]
-                    self.log(f"members after extraction: {type(self.member_instance)}, {self.member_instance}")
-                else:
-                    self.log(f"Unexpected Shape - self.members: {type(self.members)}")
-                    self.member_instance = self.members.get("members", None)
-                for entry in self.member_instance:
-                    self.log(f"entry: {entry}")
-                    qualified_name = self.selected_qname
-                    self.log(f"qualified_name: {qualified_name}")
+                self.log(f"payload: {self.member_list}")
+                if isinstance(self.member_list, str):
+                    self.member_list: list = ast.literal_eval(self.member_list)
+                for entry in self.member_list:
+                    self.log(f" from member_list - entry: {entry}")
+                    self.member_instance = entry
+                    qualified_name = self.member_instance
                     try:
                         member_data: dict = exec_format_set(
                             format_set_name="ExploreStructure",
@@ -534,42 +564,46 @@ class DataProducts(App):
                         member_data = {}
                     if member_data:
                         self.log(f" found member_data: {member_data}")
-                        for entry in member_data:
+                        twoinstance = self.unpack_egeria_data(member_data)
+                        member_attributes = twoinstance
+                        self.log(f"member_attributes: {member_attributes}, type: {type(member_attributes)}")
+                        for entry in member_attributes:
                             # extract the data area from the response
-                            value: list = entry["data"]
-                            value2: dict = value[0]
-                            self.log(f"value: {value}")
-                            self.log(f"value2: {value2}")
-                            # # if it is not a DICT structure skip to the next iteration (if any)
-                            # if not isinstance(value2, dict):
-                            #     continue
-                            # otherwise extract the attributes from the data structure
-                            dname = value2.get("Display Name", None)
-                            tname = value2.get("Type Name", None)
-                            desc = value2.get("Description", None)
-                            stat = value2.get("Status", None)
-                            self.member_datatable.add_row(
-                                qualified_name,
-                                dname,
-                                tname,
-                                stat,
-                                desc
-                            )
-                            self.log(f"member_data row added: {member_data}")
-                            self.log(f"Extracted: {dname}, {tname}, {desc}, {stat}")
+                            if "unknown" in entry:
+                                self.member_datatable.add_row(
+                                    entry.get("error"),
+                                    entry.get("unknown")
+                                )
+                                continue
+                            elif "shape" in entry:
+                                self.member_datatable.add_row(
+                                    entry.get("error"),
+                                    entry.get("shape")
+                                )
+                                continue
+                            elif "Egeria Error" in entry:
+                                self.member_datatable.add_row(
+                                    entry.get("Egeria Error")
+                                )
+                                continue
+                            elif "error" in entry:
+                                self.member_datatable.add_row(
+                                    entry.get("error")
+                                )
+                                continue
+                            else:
+                                self.member_datatable.add_row(
+                                    entry["Display Name"],
+                                    qualified_name,
+                                    entry["Type Name"],
+                                    entry["Description"]
+                                )
                             continue
                     else:
                         self.log(f"no member data found: {member_data}")
-                        dname = None
-                        tname = None
-                        desc = None
-                        stat = None
                         self.member_datatable.add_row(
                             qualified_name,
-                            dname,
-                            tname,
-                            stat,
-                            desc
+                            {"Data": "No member data found"}
                         )
                         self.log(f" No member_data empty (None) row added")
                         continue
@@ -582,8 +616,10 @@ class DataProducts(App):
                 self.collection_datatable.remove()
             widget_to_mount = self.query_one("#member_datatable")
             if not widget_to_mount:
-                self.mount(self.member_datatable, after="after_static")
+                self.mount(self.member_datatable, before="after_static")
             self.member_datatable.refresh(layout=True, recompose=True)
+            update_label_description = self.query_one("#before_static", Static)
+            update_label_description.update(content = "Available Contained Members List:\n\n", layout = True)
         except (NoMatches):
             self.mount(self.member_datatable, after="#after_static")
         # self.log(f"DataTable Refreshed")
@@ -593,10 +629,10 @@ class DataProducts(App):
         """ Retrieve members of a collection """
         self.selected_row = message.row_key
         self.selected_data = self.member_datatable.get_row(message.row_key)
-        self.selected_name = self.row_selected_data[0] or ""
-        self.selected_qname = self.row_selected_data[1] or ""
-        self.selected_type = self.row_selected_data[2] or ""
-        self.selected_desc = self.row_selected_data[3] or ""
+        self.selected_name = str(self.row_selected_data[0] or "")
+        self.selected_qname = str(self.row_selected_data[1] or "")
+        self.selected_type = str(self.row_selected_data[2] or "")
+        self.selected_desc = str(self.row_selected_data[3] or "")
 
         # Retrieve selected Member
         response = exec_format_set(
@@ -608,48 +644,15 @@ class DataProducts(App):
             user=self.user,
             user_pass=self.password,
         )
-        self.log(f"response: {response}")
-
         # Robustly extract data payload from response["data"]. Then populate self.members.
         payload = None
-        if isinstance(response, dict) and "data" in response:
-            value = response["data"]
-            self.log(f"value: {value}")
-            if isinstance(value, (dict, list)):
-                payload = value
-                self.log(f"payload: {payload}")
-            elif isinstance(value, str):
-                text = value.strip()
-                self.log(f"text: {text}")
-                # Decode text (ast)
-                try:
-                    payload = ast.literal_eval(text)
-                    self.log(f"payload: {payload}")
-                except Exception:
-                    payload = None
 
-        if payload is None:
-            self.log(f"No parsable data found in response from Egeria{response['data']}")
-        else:
-            # Ensure self.members becomes a list of dicts for downstream UI
-            if isinstance(payload, list):
-                self.members = payload
-                self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
-            elif isinstance(payload, dict):
-                # If the dict wraps the actual list of members under a known key, unwrap it
-                inner = payload.get("members") if "members" in payload else None
-                self.log(f"inner: {inner}")
-                if isinstance(inner, list):
-                    self.members = inner
-                    self.log(f"members after extraction: {type(self.members)} len={len(self.members)}")
-                else:
-                    self.members = [payload]
-                    self.log(f"collections after extraction: {type(self.members)} len={len(self.members)}")
-            else:
-                # Unknown shape; keep default empty element and log
-                self.log(f"Unexpected payload type: {type(payload)}")
-        self.members = payload
-        self.log(f"Members after extraction: {type(self.members)} len={len(self.members)}")
+        oneinstance = self.unpack_egeria_data(response)
+        payload = oneinstance
+
+        for entry in payload:
+            self.member_data = entry.get("data")
+            self.members = self.member_data.get("Containing Members")
         # If the member has members carry on drilling down to leaf level -
         # Create an instance of the Members Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
@@ -668,6 +671,7 @@ class DataProducts(App):
 
         inner_dn = inner_qn = inner_c = inner_d = inner_s = inner_tn = ""
         inner_cm = ""
+
         if member_details is None:
             # no input provided, set to empty list
             member_details = []
@@ -806,32 +810,43 @@ class DataProducts(App):
         self.log(f"response: {response}")
 
         # Robustly extract data payload from response["data"]. Then populate self.members.
-        payload = None
-        if isinstance(response, dict) and "data" in response:
-            value = response["data"]
-            self.log(f"value: {value}")
-            if isinstance(value, (dict, list)):
-                payload = value
-                self.log(f"payload: {payload}")
-            elif isinstance(value, str):
-                text = value.strip()
-                self.log(f"text: {text}")
-                # Decode text (ast)
-                try:
-                    payload = ast.literal_eval(text)
-                    self.log(f"payload: {payload}")
-                except Exception:
-                    payload = None
+        payload = [{}]
+        if isinstance(response, dict) or isinstance(response, list):
+            payload = self.unpack_egeria_data(response)
+            self.log(f"payload: {payload}")
 
-        if payload is None:
-            self.log(f"No parsable data found in response from Egeria{response['data']}")
-            payload = ["No parsable data found in response from Egeria"]
+        if not payload:
+            self.log("No parsable data found in response from Egeria")
+            payload = [{"error": "No parsable data found in response from Egeria"}]
         return payload
 
     async def action_back(self) -> None:
     #     """ Return to the Display Available Catalogs display """
         self.log(f"Back requested")
         self.refresh_main_screen()
+
+    def unpack_egeria_data(self, data) -> list[dict]:
+        """ Unpack the data returned from Egeria """
+        output_data: list[dict] = []
+        output_data.clear()
+        if isinstance(data, dict):
+            if "data" in data:
+                output_data = data.get("data")
+        elif isinstance(data, list):
+            for entry in data:
+                if isinstance(entry, dict):
+                    output_data = entry.get("data")
+                elif isinstance(entry, list):
+                    for subentry in entry:
+                        if isinstance(subentry, dict):
+                            output_data = subentry.get("data")
+                        else:
+                            output_data = [{"error": "unknown data structure"}]
+                else:
+                    output_data = [{"error": "unknown outer data structure"}]
+        else:
+            output_data = [{"error": "not dict or list", "shape": "data to unpack is not a recognized shape"}]
+        return(output_data)
 
 if __name__ == "__main__":
     try:
