@@ -9,30 +9,24 @@ import ast
 import os
 
 from textual.css.query import NoMatches
-from textual.reactive import reactive
-from textual.screen import Screen, ModalScreen
+from textual.screen import ModalScreen
 from textual import on
 from textual.app import App, ComposeResult
 from textual.message import Message
 from textual.containers import Container, ScrollableContainer, Vertical
-from textual.widget import Widget
 from textual.widgets import Label, Button, TextArea, Header, Static, Footer, DataTable
 from demo_service import get_config
 from pyegeria.format_set_executor import exec_format_set
-from src.DemoCode.member_details_screen_current import MemberDetailsScreen
 from pyegeria._output_format_models import (
     Column,
     Format,
     ActionParameter,
     FormatSet)
+from member_details_screen import MemberDetailsScreen
 from pyegeria._output_formats import (
     output_format_sets,
     select_output_format_set,
-    output_format_set_list,
-    get_output_format_set_heading,
-    get_output_format_set_description,
-    get_output_format_type_match
-)
+    )
 
 CSS_PATH = ["data_products_css.tcss"]
 
@@ -159,7 +153,8 @@ class SplashScreen(ModalScreen):
 class DataProducts(App):
 
     SCREENS = {
-        "splash": SplashScreen
+        "splash": SplashScreen,
+        "member": MemberDetailsScreen,
     }
 
     BINDINGS = [
@@ -172,7 +167,6 @@ class DataProducts(App):
     def __init__(self):
         super().__init__()
         self.Egeria_config = ["https://127.0.0.1:9443", "qs-view-server", "erinoverview", "secret"]
-        self.log(f"In Data Products App, init")
         self.platform_url = self.Egeria_config[0]
         self.view_server = self.Egeria_config[1]
         self.user = self.Egeria_config[2]
@@ -182,7 +176,7 @@ class DataProducts(App):
         """ Access Egeria API using bearer token """
         self.log(f"Accessing Egeria API")
         try:
-            self.log(f"initializing egeria client with: , {self.platform_url} , {self.view_server} , {self.user} , {self.password}")
+
             # Retrieve needed format sets from Egeria
             catalog_set = select_output_format_set("Digital-Product-Catalog-MyE", "DICT")
             if catalog_set:
@@ -210,9 +204,11 @@ class DataProducts(App):
             # without regard to the specific type of an entry
         columns = [
             Column(name="Display Name", key="display_name"),
+            Column(name="Qualified Name", key="qualified_name"),
             Column(name="Description", key="description", format=True),
             Column(name="Type Name", key="type_name"),
             Column(name="Status", key="status"),
+            Column(name="Containing Members", key="Containing Members", format=True),
             ]
         MyE_format = Format(
             types=["DICT"],
@@ -229,7 +225,7 @@ class DataProducts(App):
                 spec_params={},
             ),
             get_additional_props=ActionParameter(
-                function="CollectionManager._extract_digital_product_catalog_properties",
+                function="CollectionManager._find_collection",
                 required_params=[],
                 spec_params={},
             )
@@ -525,7 +521,7 @@ class DataProducts(App):
         self.member_datatable.id = "member_datatable"
         # Add columns to the DataTable
         # self.member_datatable.add_columns(*MembersScreen.ROWS[0])
-        self.member_datatable.add_columns( "Qualified Name","Display Name", "Type Name", "Status", "Description")
+        self.member_datatable.add_columns( "Display Name","Qualified Name", "Type Name", "Status", "Description")
         # set the cursor to row instead of cell
         self.member_datatable.cursor_type = "row"
         # give the DataTable zebra stripes so it is easier to follow across rows on the screen
@@ -628,15 +624,17 @@ class DataProducts(App):
     def handle_member_table_row_selected(self, message: DataTable.RowSelected):
         """ Retrieve members of a collection """
         self.selected_row = message.row_key
-        self.selected_data = self.member_datatable.get_row(message.row_key)
-        self.selected_name = str(self.row_selected_data[0] or "")
-        self.selected_qname = str(self.row_selected_data[1] or "")
-        self.selected_type = str(self.row_selected_data[2] or "")
-        self.selected_desc = str(self.row_selected_data[3] or "")
-
+        self.log(f"Row Selected, Processing selection, {self.selected_row}")
+        self.selected_member_data = self.member_datatable.get_row(message.row_key)
+        self.log(f"Member DataTable, row selected: {self.selected_member_data}")
+        self.selected_name = str(self.selected_member_data[0] or "")
+        self.selected_qname = str(self.selected_member_data[1] or "")
+        self.selected_type = str(self.selected_member_data[2] or "")
+        self.selected_desc = str(self.selected_member_data[3] or "")
+        self.log(f"selected_qname: {self.selected_qname}")
         # Retrieve selected Member
         response = exec_format_set(
-            format_set_name="Digital-Products-MyE",
+            format_set_name="ExploreStructure",
             params={"search_string": self.selected_qname},
             output_format="DICT",
             view_server=self.view_server,
@@ -645,96 +643,134 @@ class DataProducts(App):
             user_pass=self.password,
         )
         # Robustly extract data payload from response["data"]. Then populate self.members.
-        payload = None
-
+        self.log(f"from egeria response: {response}")
+        self.members = []
+        self.members.clear()
+        payload: list = []
+        payload.clear()
         oneinstance = self.unpack_egeria_data(response)
         payload = oneinstance
-
+        self.log(f"member selected payload: {payload}")
         for entry in payload:
-            self.member_data = entry.get("data")
-            self.members = self.member_data.get("Containing Members")
+            self.log(f"entry in payload: {entry}")
+            if isinstance(entry, dict) and "data" not in list(entry.keys()):
+                self.members = entry.get("Containing Members")
+                self.log(f"Containing members: {self.members}")
+                if not isinstance(self.members, str) or self.members is None or self.members == '':
+                    self.log(f"No member data found")
+                    self.members = None
+                else:
+                    split_list = ast.literal_eval(self.members)
+                    self.log(f"literal_eval of member_list: {split_list}")
+                    self.members = split_list
+            else:
+                self.member_data = entry.get("data")
+                self.log(f"member data: {self.member_data}")
+                self.members = self.member_data.get("Containing Members")
+                self.log(f"Containing members: {self.members}")
+                if not self.members or self.members is None:
+                    self.members = None
+                else:
+                    split_list = ast.literal_eval(self.members)
+                    self.log(f"literal_eval of member_list: {split_list}")
+                    self.members = split_list
         # If the member has members carry on drilling down to leaf level -
         # Create an instance of the Members Screen and pass it the data retrieved from Egeria
         # and push it to the top of screen stack to display
-        if self.members is not None:
+        self.log(f"members: {self.members}")
+        if isinstance(self.members, list) and self.members != None :
             self.process_members()
-        #     ms_instance = MembersScreen(self.members)
-        #     self.push_screen(ms_instance)
         else:
-            self.display_member_details(self.selected_row)
+            self.log(f"No members, display data for selected member: {self.selected_qname}")
+            self.display_member_details(self.selected_qname)
 
-    def display_member_details(self, selected_row):
+    def display_member_details(self, selected_qname):
         """ Request to display the details for a selected record """
             # gather details returned from egeria
-        self.selected_row = selected_row
-        member_details = self.get_member_details(self.selected_row)
-
+        self.selected_qname = selected_qname
+        self.log(f"Selected qname to get member details: {self.selected_qname}")
+        member_details = self.get_member_details(self.selected_qname)
+        self.log(f"member_details: {member_details}, type: {type(member_details)}")
         inner_dn = inner_qn = inner_c = inner_d = inner_s = inner_tn = ""
-        inner_cm = ""
+        inner_cm = []
 
-        if member_details is None:
-            # no input provided, set to empty list
-            member_details = []
-        elif isinstance(member_details, list):
-            # input is list
-            self.log(f"Member Details input is a list: {member_details}")
-        elif isinstance(member_details, dict):
-            # input is dict
-            self.log(f"Member Details input is a dict: {member_details}")
-            inner_dn = member_details.get("Display Name") if "Display Name" in member_details else None
-            inner_qn = member_details.get("Qualified Name") if "Qualified Name" in member_details else None
-            inner_c = member_details.get("Categories") if "Categories" in member_details else None
-            inner_d = member_details.get("Description") if "Description" in member_details else None
-            inner_s = member_details.get("Status") if "Status" in member_details else None
-            inner_tn = member_details.get("Type Name") if "Type Name" in member_details else None
-            inner_cm = member_details.get("Containing Members") if "Containing Members" in member_details else None
-            if isinstance(inner_cm, list):
-                self.containing_members = inner_cm
-                self.log(
-                    f"members after extraction: {type(self.containing_members)} len={len(self.containing_members)}")
+        if member_details:
+            if isinstance(member_details, list):
+                self.log(f"Member Details input is a list: {member_details}")
+                if "error" in list(member_details[0].keys()):
+                    self.log(f"member_details contain error message: {member_details}")
+                elif member_details is None:
+                    self.log(f"No member data found {member_details}")
+                    # no input provided, set to empty list
+                    member_details: list = [{"error": "No data returned from Egeria"}]
+                    self.log(f"no member_details from Egeria: {member_details}")
+                else:
+                    # input is list, not empty and not an error message
+                    if isinstance(member_details[0], dict):
+                        self.log(f"member_details[0] contains a dict: {member_details}")
+                        members_ext = member_details[0]
+                        self.log (f"members_ext: {members_ext}")
+                        if members_ext is not None:
+                            inner_dn= members_ext.get("Display Name") if "Display Name" in members_ext else None
+                            inner_qn= members_ext.get("Qualified Name") if "Qualified Name" in members_ext else None
+                            inner_c= members_ext.get("Categories") if "Categories" in members_ext else None
+                            inner_d= members_ext.get("Description") if "Description" in members_ext else None
+                            inner_s= members_ext.get("Status") if "Status" in members_ext else None
+                            inner_tn= members_ext.get("Type Name") if "Type Name" in members_ext else None
+                            inner_cm= members_ext.get("Contains Members") if "Contains Members" in members_ext else None
+                        if inner_cm is not None and inner_cm is not "":
+                            if isinstance(inner_cm, str):
+                                split_list = ast.literal_eval(inner_cm)
+                                self.log(f"split of inner_cm: {split_list}")
+                                inner_cm: list = split_list
+                            else:
+                                # input is not a string, no Contains Members
+                                self.log(f"Contains Members is not a string: {inner_cm}, clearing")
+                                inner_cm.clear()
+                                pass
+                        else:
+                            # input is none, empty
+                            self.log(f"Contains Members is: {inner_cm}, empty")
+                            inner_cm = []
+                    else:
+                        # the first entry in the list is not a dict, unknown shape
+                        self.log(f"First entry in member_details is not a dict: {member_details}")
+                        self.inner_cm = None
+                        pass
+            elif isinstance(member_details, dict):
+                # input is dict
+                self.log(f"Member Details input is a dict: {member_details}")
+                inner_dn = member_details.get("Display Name") if "Display Name" in member_details else None
+                inner_qn = member_details.get("Qualified Name") if "Qualified Name" in member_details else None
+                inner_c = member_details.get("Categories") if "Categories" in member_details else None
+                inner_d = member_details.get("Description") if "Description" in member_details else None
+                inner_s = member_details.get("Status") if "Status" in member_details else None
+                inner_tn = member_details.get("Type Name") if "Type Name" in member_details else None
+                inner_cm = member_details.get("Containing Members") if "Containing Members" in member_details else None
+                if isinstance(inner_cm, list):
+                    self.containing_members = inner_cm
+                    self.log(
+                        f"members after extraction: {type(self.containing_members)} len={len(self.containing_members)}")
+                else:
+                    self.containing_members = None
             else:
-                self.containing_members = None
+                # Unknown shape of input to member details screen, setting to emply list
+                self.log(f"Member Details input is not a list or dict: {member_details}")
+                member_details = []
         else:
-            # Unknown shape of input to member details screen, setting to emply list
-            self.log(f"Member Details input is not a list or dict: {member_details}")
-            member_details = []
-        # self.log(f"Member Details Screen init started with data: {member_details}")
-        self.member_details_datatable: DataTable = DataTable()
-        # confire the DataTable - member_datatable
-        self.member_details_datatable.id = "member_datatable"
-        # Add columns to the DataTable
-        self.member_details_datatable.add_columns(*MemberDetailsScreen.ROWS[0])
-        # set the cursor to row instead of cell
-        self.member_details_datatable.cursor_type = "row"
-        # give the DataTable zebra stripes so it is easier to follow across rows on the screen
-        self.member_details_datatable.zebra_stripes = True
-        # log the results of configuring the DataTable
-        # self.log(f"Member Details DataTable Created:")
-        # self.log(f"Member Details DataTable: {self.member_details_datatable.columns}")
-        # Check that we have at least one Data Product Catalogue
-        if member_details is None:
-            # No Data Product Catalogues found
-            # self.log("No Data Product Catalogues found")
-            self.member_details_datatable.add_row("Error, No Data Product Catalogues found")
-        elif type(member_details) is list and len(member_details) == 0:
-            self.member_details_datatable.add_row("Error, No Data Product Catalogues found")
-        else:
-            # Load data into the DataTable
-            try:
-                for entry in member_details:
-                    self.member_details_datatable.add_row(
-                        inner_dn,
-                        inner_qn,
-                        inner_c,
-                        inner_d,
-                        inner_s,
-                        inner_tn,
-                        self.containing_members
-                    )
-            except Exception as e:
-                self.member_details_datatable.add_row("Error", "Error updating member list", str(e))
+            #member_details does not exist
+            self.log(f"member_details does not exist: {member_details}")
+            member_details = [{"error": "No member_details found"}]
+        try:
+            inner_dn = inner_dn.strip()
+            inner_qn = inner_qn.strip()
+            inner_tn = inner_tn.strip()
+        except IndexError:
+            pass
 
-        self.member_details_datatable.refresh(layout=True, recompose=True)
+        table_data: list = [inner_dn, inner_qn, inner_c, inner_d, inner_s, inner_tn, inner_cm, inner_cm, member_details]
+        self.log(f"table_data: {table_data}")
+        self.push_screen(MemberDetailsScreen(table_data))
 
 
     def process_members(self):
@@ -792,14 +828,14 @@ class DataProducts(App):
         except (NoMatches):
             self.mount(self.member_datatable, after="#after_static")
 
-    def get_member_details(self, selected_row) -> list:
+    def get_member_details(self, selected_qname) -> list:
         """ Retrieve members of a collection """
-        self.selected_row = selected_row
-        self.selected_qualified_name = self.selected_row.get("QName")
-
+        self.selected_qualified_name = str(selected_qname)
+        self.log(f"Selected qualified name for exec_format_set: {self.selected_qualified_name}")
         # Retrieve selected Member
         response = exec_format_set(
-            format_set_name="Digital-Products-MyE",
+            # format_set_name="BasicCollections",
+            format_set_name="ExploreStructure",
             params={"search_string": self.selected_qualified_name},
             output_format="DICT",
             view_server=self.view_server,
@@ -815,9 +851,10 @@ class DataProducts(App):
             payload = self.unpack_egeria_data(response)
             self.log(f"payload: {payload}")
 
-        if not payload:
+        if not isinstance(payload, list) or len(payload) == 0:
             self.log("No parsable data found in response from Egeria")
             payload = [{"error": "No parsable data found in response from Egeria"}]
+
         return payload
 
     async def action_back(self) -> None:

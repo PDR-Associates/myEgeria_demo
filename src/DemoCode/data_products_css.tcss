@@ -1,47 +1,107 @@
 Screen {
-        background: $surface;
-        border: solid $primary;
-        padding: 1;
-        height: auto;
-        }
-.connection_info {
-        background: $panel;
-        color: $text;
-        border: round $primary;
-        height: 1fr;
-        width: 1fr;
+    background: $surface;
+    border: solid $primary;
+    padding: 1;
+    height: auto;
     }
-.title_row {
+#connection_info {
     background: $panel;
     color: $text;
     border: round $primary;
     height: 1fr;
     width: 1fr;
-    align: center middle;
-}
-.main_content {
-    background: $panel;
-    color: $text;
-    border: round $primary;
-    height: 10fr;
-    width: 1fr;
-}
-.action_row {
-    background: $panel;
-    color: $text;
-    border: round $primary;
-    height: 2fr;
-    width: 1fr;
-}
-#title {
-    align: center middle;
-}
-#main_menu {
-    align: center middle;
-}
-#collection_datatable {
-    width: 1fr;
-    height: auto;
-    border: solid $primary;
-    align: center middle;
-}
+    }
+/*#title_row {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 2fr;*/
+/*    width: 1fr;*/
+/*    align: center middle;*/
+/*}*/
+/*#main_content {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 20fr;*/
+/*    width: 1fr;*/
+/*}*/
+/*#action_row {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 5fr;*/
+/*    width: 1fr;*/
+/*}*/
+/*#title {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 2fr;*/
+/*    width: 1fr;*/
+/*    align: center middle;*/
+/*}*/
+/*#main_menu {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 20fr;*/
+/*    width: 1fr;*/
+/*    align: center middle;*/
+/*}*/
+/*#collection_datatable {*/
+/*    width: 1fr;*/
+/*    height: auto;*/
+/*    border: solid $primary;*/
+/*    align: center middle;*/
+/*}*/
+/*#member_datatable {*/
+/*    width: 1fr;*/
+/*    height: auto;*/
+/*    border: solid $primary;*/
+/*    align: center middle;*/
+/*}*/
+/*#member_connection_info {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 2fr;*/
+/*    width: 1fr;*/
+/*}*/
+/*#member_title_row {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 2fr;*/
+/*    width: 1fr;*/
+/*    align: center middle;*/
+/*}*/
+/*#member_content {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: auto;*/
+/*    width: 1fr;*/
+/*}*/
+/*#member_action_row {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 4fr;*/
+/*    width: 1fr;*/
+/*}*/
+/*#splash_top {*/
+/*   background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 15fr;*/
+/*    width: 1fr;*/
+/*    align: center middle;*/
+/*}*/
+/*#splash_text {*/
+/*    background: $panel;*/
+/*    color: $text;*/
+/*    border: round $primary;*/
+/*    height: 10fr;*/
+/*    width: 1fr;*/
+/*}*/
