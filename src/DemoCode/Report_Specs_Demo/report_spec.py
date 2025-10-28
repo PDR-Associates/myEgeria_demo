@@ -10,7 +10,7 @@ import os
 
 from textual import on
 from textual.app import ComposeResult, App
-from textual.containers import Container, Horizontal
+from textual.containers import Container, Horizontal, Grid
 from textual.screen import ModalScreen
 from textual.widgets import Static, ListView, ListItem, Label, Button, Footer, Header, TextArea
 
@@ -18,6 +18,7 @@ from pyegeria.base_report_formats import select_report_spec, report_spec_list
 from pyegeria.format_set_executor import exec_report_spec
 
 from report_spec_splash_screen import SplashScreen
+from report_spec_details import ReportSpecDetails
 
 CSS_PATH = ["report_specs.tcss"]
 
@@ -25,6 +26,7 @@ class ReportSpec(App):
 
     SCREENS = {
         "splash": SplashScreen,
+        "spec_details": ReportSpecDetails,
     }
 
     BINDINGS = [
@@ -33,6 +35,14 @@ class ReportSpec(App):
     ]
 
     CSS_PATH = ["report_specs.tcss"]
+
+    class GridChildrenApp(App):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+
+        def compose(self):
+            self.query_one("#spec_grid", Grid).mount()
+            return
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -141,53 +151,21 @@ class ReportSpec(App):
                                    user_pass=self.password)
         self.log(f"Return from exec_report_spec:")
         self.log(f"reponse: {reponse}")
-        self.display_response(reponse)
+        # self.display_response(reponse)
+        spec_details = ReportSpecDetails(reponse)
+        self.push_screen(spec_details)
 
-    def display_response(self, response):
-        top = self.query_one("#report_specs_listview", ListView)
-        top.remove()
-        self.response = response
-        response_data: list[dict] = response.get("data")
-        self.log(f"response_data: {response_data}")
-        if not response_data or response_data == None or response_data == "":
-            response_data = [{"NoData": "No data found for selected item"}]
-        if isinstance(response_data, list):
-            response_data: dict = response_data[0]
-        if isinstance(response_data, dict):
-            i = 0
-            for key, value in response_data.items():
-                self.log(f"key: {key}, value: {value}")
-                if isinstance(value, dict):
-                    for vkey, vvalue in value.items():
-                        key_widget = Static(f"{vkey}", id="response_key")
-                        value_widget = Static(f"{vvalue}", id = 'response_value')
-                        self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
-                        self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
-                        continue
-                elif isinstance(value, list):
-                    for v in value:
-                        key_widget = Static(f"{v}", id="vresponse_key"+f"{i}")
-                        value_widget = Static(f"{v}", id = "vresponse_value"+f"{i}")
-                        self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
-                        self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
-                        i += 1
-                        continue
-                elif key == "kind" and value == "empty":
-                    key_widget = Static(f"No Data", id="eresponse_key")
-                    value_widget = Static(f"For That Asset Type in this repository", id='eresponse_value')
-                    self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
-                    self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
-                    continue
-                else:
-                    key_widget = Static(f"{key}", id="response_key"+f"{i}")
-                    value_widget = Static(f"{value}", id = "response_value"+f"{i}")
-                    self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
-                    self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
-                    i += 1
-                    continue
-        # Once the data is loaded to the display area, add the Continue button
-        continue_button = Button("Continue", variant="primary", id="continue_report")
-        self.query_one("#action_row").mount(continue_button,after="#back",)
+    def on_report_spec_report_details_back(self, Message) -> None:
+        """ Return to the main menu screen """
+        self.pop_screen()
+
+    def on_report_spec_report_details_quit(self, Message) -> None:
+        """ Quit the application gracefully with a "good" return code (200) """
+        self.exit(200)
+
+    def on_report_spec_report_details_continue(self, Message) -> None:
+        """ Return to the main menu screen """
+        self.pop_screen()
 
 if __name__ == "__main__":
     try:
