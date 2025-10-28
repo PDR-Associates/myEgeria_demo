@@ -1,0 +1,12 @@
+Screen {
+    layout: grid;
+    grid-size: 1 ;
+    grid-columns: auto;
+
+}
+
+.box {
+    height: 100%;
+    border: solid green;
+}
+
