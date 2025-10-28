@@ -153,30 +153,41 @@ class ReportSpec(App):
             response_data = [{"NoData": "No data found for selected item"}]
         if isinstance(response_data, list):
             response_data: dict = response_data[0]
-        for key, value in response_data:
-            self.log(f"key: {key}, value: {value}")
-            if isinstance(value, dict):
-                for key, value in value.items():
-                    key_widget = Static(f"{key}", id="response_key")
-                    value_widget = Static(f"{value}", id = 'response_value')
-                    self.query_one("#report_end").mount(key_widget, before="reponse_end")
-                    self.query_one("#report_end").mount(value_widget, before="reponse_end")
+        if isinstance(response_data, dict):
+            i = 0
+            for key, value in response_data.items():
+                self.log(f"key: {key}, value: {value}")
+                if isinstance(value, dict):
+                    for vkey, vvalue in value.items():
+                        key_widget = Static(f"{vkey}", id="response_key")
+                        value_widget = Static(f"{vvalue}", id = 'response_value')
+                        self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
+                        self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
+                        continue
+                elif isinstance(value, list):
+                    for v in value:
+                        key_widget = Static(f"{v}", id="vresponse_key"+f"{i}")
+                        value_widget = Static(f"{v}", id = "vresponse_value"+f"{i}")
+                        self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
+                        self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
+                        i += 1
+                        continue
+                elif key == "kind" and value == "empty":
+                    key_widget = Static(f"No Data", id="eresponse_key")
+                    value_widget = Static(f"For That Asset Type in this repository", id='eresponse_value')
+                    self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
+                    self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
                     continue
-            elif key == "kind" and value == "empty":
-                key_widget = Static(f"No Data", id="response_key")
-                value_widget = Static(f"For That Asset Type in this repository", id='response_value')
-                self.query_one("#report_end").mount(key_widget, before="reponse_end")
-                self.query_one("#report_end").mount(value_widget, before="reponse_end")
-                continue
-            else:
-                key_widget = Static(f"{key}", id="response_key")
-                value_widget = Static(f"{value}", id = 'response_value')
-                self.query_one("#report_end").mount(key_widget, before="reponse_end")
-                self.query_one("#report_end").mount(value_widget, before="reponse_end")
-                continue
+                else:
+                    key_widget = Static(f"{key}", id="response_key"+f"{i}")
+                    value_widget = Static(f"{value}", id = "response_value"+f"{i}")
+                    self.query_one("#report_specs_listview_container").mount(key_widget, before="#report_end")
+                    self.query_one("#report_specs_listview_container").mount(value_widget, before="#report_end")
+                    i += 1
+                    continue
         # Once the data is loaded to the display area, add the Continue button
         continue_button = Button("Continue", variant="primary", id="continue_report")
-        self.query_one("#action_row").mount(continue_button,after="back_button",)
+        self.query_one("#action_row").mount(continue_button,after="#back",)
 
 if __name__ == "__main__":
     try:
