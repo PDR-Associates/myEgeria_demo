@@ -1,26 +1,27 @@
-# python
+"""
+   PDX-License-Identifier: Apache-2.0
+   Copyright Contributors to the ODPi Egeria project.
 
-"""PDX-License-Identifier: Apache-2.0
-Copyright Contributors to the ODPi Egeria project.
-
-This module provides services for the Screen related functions of my_egeria module.
-
+   This file provides a set of report specification related functions for my_egeria.
 
 """
-
+from textual import on
+from textual.app import ComposeResult
 from textual.containers import Container
 from textual.message import Message
-from textual.widgets import Label, Button, TextArea
-from textual import on
-from base_screen import BaseScreen
+from textual.screen import ModalScreen
+from textual.widgets import Static, Label, Button, Footer, Header, TextArea
 
-class SplashScreen(BaseScreen):
-    """Splash screen with inline styles (no TCSS)."""
+CSS_PATH = ["report_specs_splash.tcss"]
+
+class SplashScreen(ModalScreen):
+    """ Egeria Exemplar UI Splash screen """
 
     class SplashContinue(Message):
-        """Message to continue to the login screen."""
+        """ Message to indicate user is ready to continue to application"""
         def __init__(self):
             super().__init__()
+
 
     def __init__(self) -> None:
         super().__init__()
@@ -42,8 +43,7 @@ class SplashScreen(BaseScreen):
             "Copyright Contributors to the ODPi Egeria project.\n"
         )
 
-    def compose(self):
-        yield from super().compose()
+    def compose(self) -> ComposeResult:
         top = Container(
             Label(
                 f"Welcome to {self.app_title} v{self.app_version} "
@@ -58,16 +58,19 @@ class SplashScreen(BaseScreen):
                 f"Platform: {self.app_build_platform}",
                 id="splash_meta",
             ),
-            Button("Continue", variant="primary", id="continue"),
-            id="splash_top",
+            id="splash_top"
         )
+        yield Header(show_clock=True)
+        yield Static("Welcome to the Egeria Exemplar UI!")
         yield top
+        yield Button("Continue", variant="primary", id="continue_splash")
+        yield Footer()
 
     async def on_mount(self):
-        await super().on_mount()
 
         # Place content in top half, center horizontally
         top = self.query_one("#splash_top", Container)
+
         top.styles.dock = "top"
         top.styles.height = "50%"
         top.styles.width = "100%"
@@ -81,15 +84,15 @@ class SplashScreen(BaseScreen):
         title.styles.text_style = "bold"
 
         # Fixed visible rows for vertical centering math
-        VISIBLE_ROWS = 12
+        VISIBLE_ROWS = 15
 
         ta = self.query_one("#splash_text", TextArea)
         ta.styles.width = "90%"
-        ta.styles.height = VISIBLE_ROWS          # fixed rows to make vertical centering predictable
-        ta.styles.border = ("solid", "white")    # solid white border
+        ta.styles.height = VISIBLE_ROWS  # fixed rows to make vertical centering predictable
+        ta.styles.border = ("solid", "white")  # solid white border
         ta.styles.text_style = "bold"
         ta.styles.padding = 1
-        ta.styles.text_align = "center"          # horizontal centering of text
+        ta.styles.text_align = "center"  # horizontal centering of text
 
         # Vertically center the content by adding top padding lines
         raw_text = self.welcome_text.strip("\n")
@@ -107,9 +110,10 @@ class SplashScreen(BaseScreen):
         meta = self.query_one("#splash_meta", Label)
         meta.styles.text_align = "center"
 
-        btn = self.query_one("#continue", Button)
+        btn = self.query_one("#continue_splash", Button)
         btn.styles.margin = (1, 0, 0, 0)
 
-    @on(Button.Pressed, "#continue")
-    async def continue_to_app(self) -> None:
+    @on(Button.Pressed, "#continue_splash")
+    def handle_continue_splash(self, event: Button.Pressed) -> None:
         self.post_message(self.SplashContinue())
+        return

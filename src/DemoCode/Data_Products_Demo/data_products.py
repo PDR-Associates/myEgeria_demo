@@ -16,17 +16,14 @@ from textual.message import Message
 from textual.containers import Container, ScrollableContainer, Vertical
 from textual.widgets import Label, Button, TextArea, Header, Static, Footer, DataTable
 from demo_service import get_config
-from pyegeria.format_set_executor import exec_format_set
+from pyegeria.format_set_executor import exec_report_spec as exec_format_set
 from pyegeria._output_format_models import (
     Column,
     Format,
     ActionParameter,
     FormatSet)
 from member_details_screen import MemberDetailsScreen
-from pyegeria._output_formats import (
-    output_format_sets,
-    select_output_format_set,
-    )
+from pyegeria.base_report_formats import select_report_spec, report_specs
 
 CSS_PATH = ["data_products_css.tcss"]
 
@@ -102,7 +99,7 @@ class SplashScreen(ModalScreen):
         top = self.query_one("#splash_top", Container)
 
         top.styles.dock = "top"
-        top.styles.height = "50%"
+        top.styles.height = "25%"
         top.styles.width = "100%"
         top.styles.padding = (1, 2)
         top.styles.align_horizontal = "center"
@@ -114,7 +111,7 @@ class SplashScreen(ModalScreen):
         title.styles.text_style = "bold"
 
         # Fixed visible rows for vertical centering math
-        VISIBLE_ROWS = 12
+        VISIBLE_ROWS = 15
 
         ta = self.query_one("#splash_text", TextArea)
         ta.styles.width = "90%"
@@ -173,12 +170,12 @@ class DataProducts(App):
         self.password = self.Egeria_config[3]
         self.token: str
 
-        """ Access Egeria API using bearer token """
-        self.log(f"Accessing Egeria API")
+        """ Access Egeria report specifications """
+        self.log(f"Accessing Egeria report specs")
         try:
 
             # Retrieve needed format sets from Egeria
-            catalog_set = select_output_format_set("Digital-Product-Catalog-MyE", "DICT")
+            catalog_set = select_report_spec("Digital-Product-Catalog-MyE", "DICT")
             if catalog_set:
                 self.log("Successfully retrieved format set by name!")
                 self.log(f"Heading: {catalog_set['heading']}")
@@ -187,7 +184,7 @@ class DataProducts(App):
                 self.log("Failed to retrieve DataProductsCatalogMyE format set by name.")
                 self.log("Program Error, please report issue to maintainer.")
                 self.exit(400)
-            product_set = select_output_format_set("Digital-Products-MyE", "DICT")
+            product_set = select_report_spec("Digital-Products-MyE", "DICT")
             if product_set:
                 self.log("Successfully retrieved format set by name!")
                 self.log(f"Heading: {product_set['heading']}")
@@ -212,7 +209,7 @@ class DataProducts(App):
             ]
         MyE_format = Format(
             types=["DICT"],
-            columns=columns
+            attributes=columns
             )
         explorer_format_set = FormatSet(
             heading="Explore-Structure-Format-Set",
@@ -231,9 +228,9 @@ class DataProducts(App):
             )
             )
 
-        output_format_sets["ExploreStructure"] = explorer_format_set
+        # report_specs["ExploreStructure"] = explorer_format_set
 
-        explorer_set = select_output_format_set("ExploreStructure", "DICT")
+        # explorer_set = select_report_spec("ExploreStructure", "DICT")
 
     def on_mount(self):
         self.log(f"on_mount event triggered")
@@ -718,7 +715,7 @@ class DataProducts(App):
                             inner_s= members_ext.get("Status") if "Status" in members_ext else None
                             inner_tn= members_ext.get("Type Name") if "Type Name" in members_ext else None
                             inner_cm= members_ext.get("Contains Members") if "Contains Members" in members_ext else None
-                        if inner_cm is not None and inner_cm is not "":
+                        if inner_cm != None and inner_cm != "":
                             if isinstance(inner_cm, str):
                                 split_list = ast.literal_eval(inner_cm)
                                 self.log(f"split of inner_cm: {split_list}")
@@ -835,7 +832,7 @@ class DataProducts(App):
         # Retrieve selected Member
         response = exec_format_set(
             # format_set_name="BasicCollections",
-            format_set_name="ExploreStructure",
+            format_set_name=self.explorer_format_set,
             params={"search_string": self.selected_qualified_name},
             output_format="DICT",
             view_server=self.view_server,

@@ -5,16 +5,14 @@
    This file provides a set of report specification related functions for my_egeria.
 
 """
-import ast
-import os
-
 from textual import on
-from textual.app import ComposeResult, App
-from textual.containers import Container, Horizontal
+from textual.app import ComposeResult
+from textual.containers import Container
 from textual.message import Message
 from textual.screen import ModalScreen
-from textual.widgets import Static, ListView, ListItem, Label, Button, Footer, Header, TextArea
+from textual.widgets import Static, Label, Button, Footer, Header, TextArea
 
+CSS_PATH = ["report_specs_splash.tcss"]
 
 class SplashScreen(ModalScreen):
     """ Egeria Exemplar UI Splash screen """
@@ -67,6 +65,53 @@ class SplashScreen(ModalScreen):
         yield top
         yield Button("Continue", variant="primary", id="continue_splash")
         yield Footer()
+
+    async def on_mount(self):
+
+        # Place content in top half, center horizontally
+        top = self.query_one("#splash_top", Container)
+
+        top.styles.dock = "top"
+        top.styles.height = "50%"
+        top.styles.width = "100%"
+        top.styles.padding = (1, 2)
+        top.styles.align_horizontal = "center"
+        top.styles.align_vertical = "top"
+        top.styles.gap = 1
+
+        title = self.query_one("#splash_title", Label)
+        title.styles.text_align = "center"
+        title.styles.text_style = "bold"
+
+        # Fixed visible rows for vertical centering math
+        VISIBLE_ROWS = 15
+
+        ta = self.query_one("#splash_text", TextArea)
+        ta.styles.width = "90%"
+        ta.styles.height = VISIBLE_ROWS  # fixed rows to make vertical centering predictable
+        ta.styles.border = ("solid", "white")  # solid white border
+        ta.styles.text_style = "bold"
+        ta.styles.padding = 1
+        ta.styles.text_align = "center"  # horizontal centering of text
+
+        # Vertically center the content by adding top padding lines
+        raw_text = self.welcome_text.strip("\n")
+        content_lines = raw_text.splitlines() or [raw_text]
+        content_rows = len(content_lines)
+
+        # Compute usable rows considering numeric padding
+        pad_top = int(getattr(ta.styles.padding, "top", 0) or 0)
+        pad_bottom = int(getattr(ta.styles.padding, "bottom", 0) or 0)
+        usable_rows = max(VISIBLE_ROWS - (pad_top + pad_bottom), 1)
+        top_pad = max((usable_rows - content_rows) // 2, 0)
+
+        ta.value = ("\n" * top_pad) + raw_text
+
+        meta = self.query_one("#splash_meta", Label)
+        meta.styles.text_align = "center"
+
+        btn = self.query_one("#continue_splash", Button)
+        btn.styles.margin = (1, 0, 0, 0)
 
     @on(Button.Pressed, "#continue_splash")
     def handle_continue_splash(self, event: Button.Pressed) -> None:
