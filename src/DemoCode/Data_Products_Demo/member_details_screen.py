@@ -5,7 +5,9 @@
 
    This file provides a utility function for my_egeria.
 
-
+    My_Egeria demos are hard wirewd to work with the Egeria QuickStart configuration
+    running in docker containers, but can be easily modified to work with any other
+    Egeria configuration.
 """
 
 from textual import on
@@ -24,7 +26,7 @@ class MemberDetailsScreen(ModalScreen):
         ("escape", "back", "Back"),
         ]
 
-    CSS_PATH = ["data_products_css.tcss"]
+    CSS_PATH = ["data_products.tcss"]
 
     class QuitRequested(Message):
         """ Message to terminate application gracefully """

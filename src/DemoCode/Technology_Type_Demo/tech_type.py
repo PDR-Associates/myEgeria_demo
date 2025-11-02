@@ -13,11 +13,10 @@ from textual.app import ComposeResult, App
 from textual.containers import Container, Horizontal, Grid, Vertical
 from textual.widgets import Static, ListView, ListItem, Button, Footer, Header
 
-from pyegeria.base_report_formats import report_spec_list
+from pyegeria.base_report_formats import TechTypeDetail
 from pyegeria.format_set_executor import exec_report_spec
 
-from report_spec_splash_screen import SplashScreen
-from report_spec_details import ReportSpecDetails
+from tech_type_splash_screen import SplashScreen
 
 CSS_PATH = ["report_specs.tcss"]
 
@@ -25,7 +24,7 @@ class ReportSpec(App):
 
     SCREENS = {
         "splash": SplashScreen,
-        "spec_details": ReportSpecDetails,
+        "tech_type_details": "tech_type_details"
     }
 
     BINDINGS = [
@@ -71,10 +70,10 @@ class ReportSpec(App):
             Static(f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}"),
             id="connection_info")
         yield Container(
-            Static(f"Start of Report Specification List:", id="report_start"),
-            ListView(*self.items, id="report_specs_listview"),
-            Static(f"End of Report Specification List:", id = "report_end"),
-            id = "report_specs_listview_container",
+            Static(f"Start of Technology Type List:", id="report_start"),
+            ListView(*self.items, id="tech_types_listview"),
+            Static(f"End of Technology Type List:", id = "report_end"),
+            id = "tech_type_listview_container",
             )
         yield Horizontal(
             Button("Quit", id="quit"),
@@ -102,9 +101,9 @@ class ReportSpec(App):
         selected_item_text = selected_item
         # selected_item_text = selected_item_label.renderable
         self.log(f"Selected item text: {selected_item_text}, type: {type(selected_item_text)}")
-        self.selected_report_spec = selected_item_text
-        self.log(f"Selected report spec: {self.selected_report_spec}")
-        self.execute_selected_report_spec()
+        self.selected_tech_type = selected_item_text
+        self.log(f"Selected report spec: {self.selected_tech_type}")
+        self.query_selected_tech_type()
 
     @on(Button.Pressed, "#quit")
     def handle_button_pressed(self, event: Button.Pressed) -> None:
@@ -117,22 +116,22 @@ class ReportSpec(App):
     def handle_back_button_pressed(self, event: Button.Pressed) -> None:
         """ Return to the main menu screen """
         self.log(f"Back button clicked")
-        self.report_spec_list = ""
-        self.selected_report_spec = ""
+        self.tech_type_list = ""
+        self.selected_tech_type = ""
         self.items.clear()
         self.switch_screen("splash")
 
-    def execute_selected_report_spec(self):
-        # execute the selected report spec
-        self.log(f"Executing report spec: {self.selected_report_spec}")
+    def query_selected_tech_type(self):
+        # query the selected tech type
+        self.log(f"Executing tech type query: {self.selected_tech_type}")
         try:
-            reponse = exec_report_spec(format_set_name=self.selected_report_spec,
+            reponse = exec_report_spec(format_set_name=self.tech_type_detail,
                                        output_format="DICT",
                                        view_server=self.view_server,
                                        view_url=self.platform_url,
                                        user=self.user,
                                        user_pass=self.password)
-            self.log(f"Return from exec_report_spec:")
+            self.log(f"Return from tech type query:")
             self.log(f"reponse: {reponse}")
         except (ValidationError) as e:
             self.log(f"ValidationError: {e}")
@@ -141,20 +140,20 @@ class ReportSpec(App):
             self.log(f"Exception: {e}")
             reponse = {"error": f"Exception: {e}"}
             # self.display_response(reponse)
-        spec_details = ReportSpecDetails(reponse)
+        spec_details = tech_type_details(reponse)
         self.push_screen(spec_details)
 
-    def on_report_spec_report_details_back(self, Message) -> None:
-        """ Return to the main menu screen """
-        self.pop_screen()
-
-    def on_report_spec_report_details_quit(self, Message) -> None:
-        """ Quit the application gracefully with a "good" return code (200) """
-        self.exit(200)
-
-    def on_report_spec_report_details_continue(self, Message) -> None:
-        """ Return to the main menu screen """
-        self.pop_screen()
+    # def on_report_spec_report_details_back(self, Message) -> None:
+    #     """ Return to the main menu screen """
+    #     self.pop_screen()
+    #
+    # def on_report_spec_report_details_quit(self, Message) -> None:
+    #     """ Quit the application gracefully with a "good" return code (200) """
+    #     self.exit(200)
+    #
+    # def on_report_spec_report_details_continue(self, Message) -> None:
+    #     """ Return to the main menu screen """
+    #     self.pop_screen()
 
 if __name__ == "__main__":
     try:

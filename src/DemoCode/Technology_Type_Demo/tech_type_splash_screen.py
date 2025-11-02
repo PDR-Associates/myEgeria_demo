@@ -12,7 +12,7 @@ from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widgets import Static, Label, Button, Footer, Header, TextArea
 
-CSS_PATH = ["report_specs_splash.tcss"]
+CSS_PATH = ["tech_type_splash.tcss"]
 
 class SplashScreen(ModalScreen):
     """ Egeria Exemplar UI Splash screen """
