@@ -25,7 +25,7 @@ from pyegeria._output_format_models import (
 from member_details_screen import MemberDetailsScreen
 from pyegeria.base_report_formats import select_report_spec, report_specs
 
-CSS_PATH = ["data_products_css.tcss"]
+CSS_PATH = ["data_products.tcss"]
 
 class SplashScreen(ModalScreen):
     """Splash screen with inline styles (no TCSS)."""
@@ -159,7 +159,7 @@ class DataProducts(App):
         ("escape", "back", "Back"),
     ]
 
-    CSS_PATH = ["data_products_css.tcss"]
+    CSS_PATH = ["data_products.tcss"]
 
     def __init__(self):
         super().__init__()

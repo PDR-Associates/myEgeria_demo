@@ -9,27 +9,32 @@
 /* no extensions for Textual, regarless of the errors the file will run correctly with Textual.    */
 /* *********************************************************************************************** */
 
-/*.Screen {*/
-/*    !* background: $surface; *!*/
-/*    color: $text;*/
-/*    border: solid $primary;*/
-/*    padding: 1;*/
-/*    height: auto;*/
-/*    }*/
+.Screen {
+    background: $surface;
+    border: solid $primary;
+    padding: 1;
+    height: auto;
+}
+.box {
+    height: 100%;
+    border: solid green;
+}
 #connection_info {
-    /*background: $panel;*/
+    background: $panel;
     color: $text;
     border: round $primary;
-    height: 1fr;
+    height: 5%;
     width: 1fr;
     }
 #report_specs_listview_container {
-    height: 10fr;
+    height: 85%;
+    width: 1fr;
     border: round $primary;
     color: $text;
 }
 #report_specs_listview {
-    height: 8fr;
+    height: 90%;
+    width: 1fr;
     border: round $primary;
     color: $text;
 }
@@ -37,20 +42,31 @@ Header {
     background: $primary;
     color: $text;
     border: round $primary;
-    height: 1fr;
+    height: 5%;
     width: 1fr;
 }
 Footer {
     background: $primary;
     color: $text;
     border: round $primary;
-    height: 1fr;
+    height: 5%;
     width: 1fr;
 }
 #action_row {
     background: $primary;
     color: $text;
     border: round $primary;
-    height: 2fr;
+    height: 10%;
     width: 1fr;
+}
+#detail_connection_info {
+    background: $panel;
+    color: $text;
+    border: round $primary;
+    height: 5%;
+}
+#report_details {
+    background: $panel;
+    color: $text;
+    height: 90%;
 }

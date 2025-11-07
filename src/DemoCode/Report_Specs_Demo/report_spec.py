@@ -98,9 +98,7 @@ class ReportSpec(App):
         """ Handle ListView selection event """
         selected_item = event.item.query_one(Static).content
         self.log(f"Selected item: {selected_item} type: {type(selected_item)}")
-        # selected_item_label = selected_item.query_one(Label).renderable
         selected_item_text = selected_item
-        # selected_item_text = selected_item_label.renderable
         self.log(f"Selected item text: {selected_item_text}, type: {type(selected_item_text)}")
         self.selected_report_spec = selected_item_text
         self.log(f"Selected report spec: {self.selected_report_spec}")
