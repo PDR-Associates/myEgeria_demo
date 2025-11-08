@@ -66,7 +66,7 @@ class MyApp(App):
             id="container4", classes="box"
             )
         yield Container(
-            Button("Quit", id="quit"),
+            Button("Quit", variant="primary", id="quit"),
             id = "action_row"
         )
         yield Footer()
@@ -74,25 +74,23 @@ class MyApp(App):
     def on_mount(self):
         self.spec_datatable = self.query_one("#spec_datatable", DataTable)
         self.spec_datatable.clear(columns=True)
-        self.spec_datatable.add_columns("Name", "Description", "")
+        self.spec_datatable.add_columns("Family", "Name", "Description", "")
         self.spec_datatable.zebra_stripes = True
         self.spec_datatable.cursor_type = "row"
-        num_columns = len(self.spec_datatable.columns)
-        self.log(f"Number of columns: {num_columns}")
+        self.family: str = ""
         self.heading = "Report Specs"
         self.subheading = "Select a report spec to execute:"
         self.description = "A list of report specifications, click on one to see its attributes\ns key to run"
-        self.report_spec_list: list = report_spec_list()
+        self.report_spec_list: list = report_spec_list(show_family=True, sort_by_family=True, return_kind="dicts")
         self.log(f"report_spec_list: {self.report_spec_list}, type: {type(self.report_spec_list)}")
         for spec in self.report_spec_list:
-            if not isinstance(spec, str):
-                spec = str(spec)
-            self.log(f"spec: {spec}")
-            desc = get_report_format_description(spec)
-            if not isinstance(desc, str):
-                desc = str(desc)
-            self.log(f"desc: {desc}")
-            self.spec_datatable.add_row(spec, desc)
+            if spec.get("family") != self.family:
+                self.family = spec.get("family")
+                self.spec_datatable.add_row(self.family, spec.get("name"), spec.get("description"))
+                continue
+            else:
+                self.spec_datatable.add_row("", spec.get("name"), spec.get("description"))
+                continue
         self.spec_datatable.refresh()
 
     @on(DataTable.RowSelected, "#spec_datatable")
@@ -102,7 +100,7 @@ class MyApp(App):
         self.log(f"selected_report_spec: {self.selected_report_spec}")
         self.selected_row_data = self.spec_datatable.get_row(message.row_key)
         self.log(f"selected_row: {self.selected_row_data}")
-        self.selected_name = str(self.selected_row_data[0] or "")
+        self.selected_name = str(self.selected_row_data[1] or "")
         self.log(f"selected_name: {self.selected_name}")
         await self.get_named_report_spec_details(self.selected_name)
         await self.execute_selected_report_spec(self.selected_name)

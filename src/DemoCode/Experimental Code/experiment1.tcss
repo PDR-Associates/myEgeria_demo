@@ -11,13 +11,13 @@
 
 Screen {
     layout: grid;
-    grid-size: 2;
+    grid-size: 2 3;
     grid-columns: 1fr 1fr;
 }
 Button {
     width: auto;
-    height: 7%;
-    border: solid blue;
+    height: auto;
+    border: solid white;
 }
 .box {
     height: 100%;
