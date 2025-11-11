@@ -19,6 +19,14 @@ Button {
     height: auto;
     border: solid white;
 }
+Static {
+    width: 50%;
+}
+Input {
+    width: 50%;
+    height: auto;
+}
+Text {}
 .box {
     height: 100%;
     width: 100%;

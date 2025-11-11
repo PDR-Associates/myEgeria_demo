@@ -24,13 +24,14 @@ from textual.app import App
 from textual.containers import Container, Horizontal
 from textual.widgets import Static, Button, DataTable, Header, Footer, Placeholder, Input, Tree
 
-
 class MyApp(App):
     CSS_PATH = "experiment1.tcss"
 
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("s", "show report", "Show"), ]
+
+
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -161,12 +162,19 @@ class MyApp(App):
                 self.log(f"list_item: {list_item}")
                 if isinstance(response_data, dict):
                     for key, value in response_data.items():
+                        self.log(f"key: {key}, value: {value}")
                         # check for input capable report spec parms
                         if key == "required_params" or key == "optional_params" or key == "spec_params" or key == "types":
+                            self.log(f"Executing populate_input_fields for key: {key}")
                             self.populate_input_fields(key, value)
+                            self.log(f"populate_input_fields completed for key: {key}")
                         self.log(f"key: {key}, value: {value}")
                         if isinstance(value, dict):
                             for vkey, vvalue in value.items():
+                                if vkey == "required_params" or vkey == "optional_params" or vkey == "spec_params" or vkey == "types":
+                                    self.log(f"Executing populate_input_fields for key: {vkey}")
+                                    self.populate_input_fields(vkey, vvalue)
+                                    self.log(f"populate_input_fields completed for key: {vkey}")
                                 self.log(f"vkey: {vkey}, vvalue: {vvalue}")
                                 self.spec_attribute_datatable.add_row(vkey, vvalue)
                                 continue
@@ -185,11 +193,19 @@ class MyApp(App):
                             self.log(f"else: key {key} value: {value}")
                             self.spec_attribute_datatable.add_row(key, value)
                             continue
-        if isinstance(response_data, dict):
+        elif isinstance(response_data, dict):
             for key, value in response_data.items():
                 self.log(f"key: {key}, value: {value}")
+                if key == "required_params" or key == "optional_params" or key == "spec_params" or key == "types":
+                    self.log(f"Executing populate_input_fields for key: {key}")
+                    self.populate_input_fields(key, value)
+                    self.log(f"populate_input_fields completed for key: {key}")
                 if isinstance(value, dict):
                     for vkey, vvalue in value.items():
+                        if vkey == "required_params" or vkey == "optional_params" or vkey == "spec_params" or vkey == "types":
+                            self.log(f"Executing populate_input_fields for key: {vkey}")
+                            self.populate_input_fields(vkey, vvalue)
+                            self.log(f"populate_input_fields completed for key: {vkey}")
                         self.spec_attribute_datatable.add_row(vkey, vvalue)
                         continue
                 elif isinstance(value, list):
@@ -303,30 +319,52 @@ class MyApp(App):
         """ Take input (optional or required) parameters and populate the input fields table"""
         self.key = key
         self.input = value
+        new_input = Horizontal()
+        self.log(f"populate_input_fields: {self.key}, type: {type(self.key)}, {self.input}, type: {type(self.input)}")
         if isinstance(self.input, dict):
-            for key, value in self.input.items():
+            for ikey, ivalue in self.input.items():
                 self.log(f"key: {key}, value: {value}")
-                new_input = Horizontal(
-                    Static(f"{key}+{str(value)}"),
-                    Input("", classes="input_fields"),
-                    id="input_field"+str(key))
-                mount_point = self.query_one("#container4", Container)
-                mount_point.mount(new_input, before="#four_end")
+                new_input = Horizontal(id="input_field"+str(ikey))
+                try:
+                    self.query_one("#input_fields").remove()
+                    self.query_one("#container4").mount(new_input, before="#four_end")
+                    new_input.mount(Static(f"{ikey}+{str(ivalue)}:"))
+                    new_input.mount(Input(" ", classes="input_fields"))
+                except Exception as e:
+                    self.log(f"Exception replacing placeholder: {e}")
+                self.query_one("#container4").refresh()
         elif isinstance(self.input, list):
             for list_item in self.input:
                 #check for type field, if so, handle specifically
                 if key == "types":
-                    new_input = Horizontal(
-                        Input(placeholder=f"{list_item}"),
-                          id="input_field"+str(key))
+                    new_input = Horizontal(id="input_field"+str(key))
+                    try:
+                        self.query_one("#input_fields").remove()
+                        self.query_one("#container4").mount(new_input, before="#four_end")
+                        new_input.mount(Static(f"DICT:"))
+                        new_input.mount(Static(" DICT is required to run the report in this program"))
+                    except Exception as e:
+                        self.log(f"Exception replacing placeholder: {e}")
+                    self.query_one("#container4").refresh()
                 else:
-                    new_input = Horizontal(Static(f"{list_item}"),
-                    Input("", classes="input_fields"),
-                          id="input_field"+str(list_item))
-                mount_point = self.query_one("#container4", Container)
-                mount_point.mount(new_input, before="#four_end")
+                    new_input = Horizontal(id="input_field"+str(list_item))
+                    try:
+                        self.query_one("#input_fields").remove()
+                        self.query_one("#container4").mount(new_input, before="#four_end")
+                        new_input.mount(Static(f"{list_item}:"))
+                        new_input.mount(Input("", classes="input_fields"))
+                    except Exception as e:
+                        self.log(f"Exception replacing placeholder: {e}")
+                    self.query_one("#container4").refresh()
         else:
-            pass
+            new_input = Horizontal(id="input_field"+str(key))
+            try:
+                self.query_one("#input_fields").remove()
+                self.query_one("#container4").mount(new_input, before="#four_end")
+                new_input.mount(Static(f"Error, Unknown Shape for {key}: {value}"))
+            except Exception as e:
+                self.log(f"Exception replacing placeholder: {e}")
+            self.query_one("#container4").refresh()
         return
 
     @on(Button.Pressed, "#quit")
