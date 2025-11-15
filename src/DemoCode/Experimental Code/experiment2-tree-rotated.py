@@ -173,8 +173,8 @@ class RunSpec(App):
         self.spec_attribute_datatable.cursor_type = "row"
         self.spec_attribute_datatable.refresh()
 
-
-        if not response_data or response_data == None or response_data == "":
+        # if not response_data or response_data == None or response_data == "":
+        if not response_data:
             response_data = {"NoData": "No data found for selected item"}
         if isinstance(response_data, list):
             for list_item in response_data:
@@ -367,6 +367,7 @@ class RunSpec(App):
         """Create interactive input rows for required/optional params."""
         self.key = key
         self.input = value
+        inp_value: Any = None
         inputs_container = self.query_one("#input_fields", Container)
 
         def safe_id(s: str) -> str:
@@ -377,14 +378,30 @@ class RunSpec(App):
         self.inputs_tracker.clear()
 
         # Build rows according to incoming shape
-
         if isinstance(self.input, dict):
             items = list(self.input.items())
             for ikey, ivalue in items:
                 row = HorizontalScroll(id=f"input_row_{safe_id(str(ikey))}")
                 await inputs_container.mount(row)
                 await row.mount(Label(f"{ikey}:"))
-                inp = Input(value="", placeholder=str(ivalue), id=f"inp_{safe_id(str(ikey))}", classes="spaced")
+                self.log(f"Processing input field: {ikey}")
+                if ikey == "search_string":
+                    inp_value = "*"
+                elif ikey == "page_size":
+                    inp_value = '0'
+                elif ikey == "start_from":
+                    inp_value = '0'
+                elif ikey == "starts_with":
+                    inp_value = "True"
+                elif ikey == "ends_with":
+                    inp_value = "False"
+                elif ikey == "ignore_case":
+                    inp_value = "False"
+                elif ikey == "output_format":
+                    inp_value = "DICT"
+                else:
+                    inp_value = ""
+                inp = Input(value=inp_value, placeholder=str(ivalue), id=f"inp_{safe_id(str(ikey))}", classes="spaced")
                 await row.mount(inp)
                 self.created_inputs.append(inp)
                 # Track by input id so events can update values reliably
@@ -394,8 +411,8 @@ class RunSpec(App):
             if key == "types":
                 row = Horizontal(id=f"input_row_{safe_id(str(key))}")
                 await inputs_container.mount(row)
-                await row.mount(Label("DICT:"))
-                await row.mount(Label(" DICT is required to run the report in this program"))
+                await row.mount(Label("Output Format:"))
+                await row.mount(Input(value="DICT", placeholder="DICT", id=f"inp_{safe_id(str(key))}", classes="spaced"))
                 # informational only; no input to track
             else:
                 for list_item in self.input:
@@ -403,7 +420,24 @@ class RunSpec(App):
                     row = Horizontal(id=f"input_row_{safe_id(label)}")
                     await inputs_container.mount(row)
                     await row.mount(Label(f"{label}:"))
-                    inp = Input(value="", placeholder="", id=f"inp_{safe_id(label)}")
+                    self.log(f"Processing input field: {label}")
+                    if label == "search_string":
+                        inp_value = "*"
+                    elif label == "page_size":
+                        inp_value = '0'
+                    elif label == "start_from":
+                        inp_value = '0'
+                    elif label == "starts_with":
+                        inp_value = "True"
+                    elif label == "ends_with":
+                        inp_value = "False"
+                    elif label == "ignore_case":
+                        inp_value = "False"
+                    elif label == "output_format":
+                        inp_value = "DICT"
+                    else:
+                        inp_value = ""
+                    inp = Input(value=inp_value, placeholder="", id=f"inp_{safe_id(label)}")
                     await row.mount(inp)
                     self.created_inputs.append(inp)
                     # Track with a reasonable parameter name for list entries
