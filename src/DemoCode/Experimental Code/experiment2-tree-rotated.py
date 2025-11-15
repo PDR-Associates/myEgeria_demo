@@ -13,10 +13,11 @@
     customized reports
 
 """
+from __future__ import annotations
 
 import os
 import re
-from typing import Any
+from typing import Any, LiteralString
 
 from pydantic import ValidationError
 from pyegeria.base_report_formats import report_spec_list, get_report_format_description, select_report_spec
@@ -27,7 +28,7 @@ from textual.containers import Container, Horizontal, HorizontalScroll
 from textual.widgets import Static, Button, DataTable, Header, Footer, Input, Tree, Label
 
 
-class MyApp(App):
+class RunSpec(App):
     CSS_PATH = "experiment1.tcss"
 
     BINDINGS = [
@@ -35,6 +36,9 @@ class MyApp(App):
         ("s", "show_report", "Show"),
         ("r", "run_report", "Run"),
         ]
+
+    # TITLE = "My_Egeria"
+    # SUB_TITLE = "Report Specification Details"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -48,8 +52,12 @@ class MyApp(App):
         self.created_inputs: list[Input] = []
         self.inputs_tracker: dict[str, list] = {}
         self.snode_label: str = ""
+        # Holds rotated data as column -> list of row values
+        self.rotated_table: dict[str, list[str]] = {}
 
     def compose(self):
+        self.title = "My_Egeria"
+        self.sub_title = "Report Specification Details"
         yield Header()
         yield Container(
             Static("Start of report specification list:", id="one_start"),
@@ -277,8 +285,8 @@ class MyApp(App):
         self.log(f"self.spec_output_datatable : {self.spec_output_datatable} has been created")
         # self.spec_output_datatable.id = "spec_output_datatable"
         self.log(f"self.spec_output_datatable has been assigned an id : {self.spec_output_datatable.id} ")
-        self.spec_output_datatable.add_columns("Key", "Value", "Description")
-        self.log(f"self.spec_output_datatable has been assigned columns {self.spec_output_datatable.columns}")
+        # self.spec_output_datatable.add_columns("Key", "Value", "Description")
+        # self.log(f"self.spec_output_datatable has been assigned columns {self.spec_output_datatable.columns}")
         # extract data payload from response["data"]. Then populate variables for display
         if isinstance(self.response, dict) and "data" in self.response:
             self.response_data = self.response.get("data")
@@ -287,8 +295,9 @@ class MyApp(App):
         elif isinstance(self.response, list):
             self.response_data = self.response
         else:
-            response_data = [{"NoData": "No data found for selected item", "Data Content": self.response}]
+            self.response_data = [{"NoData": "No data found for selected item", "Data Content": self.response}]
 
+        self.rotated_table.clear()
         if isinstance(self.response_data, list):
             for list_item in self.response_data:
                 response_dict = list_item if isinstance(list_item, dict) else {"Value": list_item}
@@ -298,20 +307,24 @@ class MyApp(App):
                     if isinstance(value, dict):
                         for vkey, vvalue in value.items():
                             self.log(f"vkey: {vkey}, vvalue: {vvalue}")
-                            self.spec_output_datatable.add_row(str(vkey), str(vvalue), "")
+                            # self.spec_output_datatable.add_row(str(vkey), str(vvalue), "")
+                            self.rotated_table.setdefault(str(vkey), []).append(vvalue)
                     elif isinstance(value, list):
                         for v in value:
                             self.log(f"v: {v}")
-                            self.spec_output_datatable.add_row(str(key), str(v), "")
+                            self.rotated_table.setdefault(str(v), []).append(" ")
+                            # self.spec_output_datatable.add_row(str(key), str(v), "")
                     elif key == "kind" and value == "empty":
-                        key_str = "No Data"
-                        value_str = "For That Asset Type in this repository"
-                        self.log(f"key_str: {key_str}, value_str: {value_str}")
-                        self.spec_output_datatable.add_row(key_str, value_str, "")
+                        key_str: str = "NoData"
+                        message: str = "For That Asset Type in this repository"
+                        self.log(f"key_str: {key_str}, value_str: {message}")
+                        # Present a single consolidated message row under NoData
+                        self.rotated_table[key_str] = [message]
+                        # self.spec_output_datatable.add_row(key_str, value_str, "")
                     else:
                         self.log(f"else: key {key} value: {value}")
-                        self.spec_output_datatable.add_row(str(key), str(value), "")
-
+                        self.rotated_table.setdefault(str(key), []).append(value)
+                        # self.spec_output_datatable.add_row(str(key), str(value), "")
         elif isinstance(self.response_data, dict):
             for key, value in self.response_data.items():
                 self.log(f"key: {key}, value: {value}")
@@ -319,16 +332,30 @@ class MyApp(App):
                     continue
                 elif isinstance(value, dict):
                     for vkey, vvalue in value.items():
-                        self.spec_output_datatable.add_row(str(vkey), str(vvalue), "")
+                        self.rotated_table.setdefault(str(vkey), []).append(vvalue)
+                        # self.spec_output_datatable.add_row(str(vkey), str(vvalue), "")
                 elif isinstance(value, list):
                     for v in value:
-                        self.spec_output_datatable.add_row(str(key), str(v), "")
+                        self.rotated_table.setdefault(str(v), []).append(" ")
+                        # self.spec_output_datatable.add_row(str(key), str(v), "")
                 elif key == "kind" and value == "empty":
-                    key_str = "No Data"
-                    value_str = "For That Asset Type in this repository"
-                    self.spec_output_datatable.add_row(key_str, value_str, "")
+                    key_str = "NoData"
+                    message = "For That Asset Type in this repository"
+                    self.log(f"key_str: {key_str}, value_str: {message}")
+                    # Present a single consolidated message row under NoData
+                    self.rotated_table[key_str] = [message]
+                    # self.spec_output_datatable.add_row(key_str, value_str, "")
                 else:
-                    self.spec_output_datatable.add_row(str(key), str(value), "")
+                    self.rotated_table.setdefault(str(key), []).append(value)
+                    # self.spec_output_datatable.add_row(str(key), str(value), "")
+        # now the rotated table is loaded with data, create the datatable
+        keys = list(self.rotated_table.keys())
+        for col_key in keys:
+            self.spec_output_datatable.add_column(str(col_key))
+        max_rows = max((len(self.rotated_table[k]) for k in keys), default=0)
+        for row_idx in range(max_rows):
+            row = [str(self.rotated_table[k][row_idx]) if row_idx < len(self.rotated_table[k]) else "" for k in keys]
+            self.spec_output_datatable.add_row(*row)
 
         # Always refresh after populating
         self.spec_output_datatable.refresh()
@@ -431,5 +458,5 @@ class MyApp(App):
         return
 
 if __name__ == "__main__":
-    app = MyApp()
+    app = RunSpec()
     app.run()
