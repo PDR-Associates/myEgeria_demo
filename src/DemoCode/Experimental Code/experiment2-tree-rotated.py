@@ -19,12 +19,14 @@ import os
 import re
 from typing import Any, LiteralString
 
+from commands.cat.list_generic import list_generic
 from pydantic import ValidationError
+from pyegeria import run_report
 from pyegeria.base_report_formats import report_spec_list, get_report_format_description, select_report_spec
 from pyegeria.format_set_executor import exec_report_spec
 from textual import on
 from textual.app import App
-from textual.containers import Container, Horizontal, HorizontalScroll
+from textual.containers import Container, Horizontal, HorizontalScroll, ScrollableContainer
 from textual.widgets import Static, Button, DataTable, Header, Footer, Input, Tree, Label
 
 
@@ -34,7 +36,7 @@ class RunSpec(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("s", "show_report", "Show"),
-        ("r", "run_report", "Run"),
+        ("r", "prepare_report", "Run"),
         ]
 
     # TITLE = "My_Egeria"
@@ -69,7 +71,7 @@ class RunSpec(App):
             DataTable(id="spec_extracted_datatable"),
             Static("End of Report Specification Details", classes="box", id="two_end"),
             id="container2", classes="box")
-        yield Container(
+        yield ScrollableContainer(
             Static("Report Specs Input Fields", classes="box", id="four_start"),
             Container(id="input_fields"),
             Static("End of Report Specs Input Fields", classes="box", id="four_end"),
@@ -132,7 +134,6 @@ class RunSpec(App):
             self.log(f"Exception clearing inputs container: {e} possibly first time through")
         self.snode_label = snode_label
         await self.get_named_report_spec_details(snode_label)
-        # await self.execute_selected_report_spec(snode_label)
 
     async def get_named_report_spec_details(self, name):
         """Get the details of a named report spec and render as a flat table.
@@ -209,6 +210,11 @@ class RunSpec(App):
                             self.log(f"key_str: {key_str}, value_str: {value_str}")
                             self.spec_attribute_datatable.add_row(key_str, value_str)
                             continue
+                        elif isinstance(value, dict):
+                            for vkey, vvalue in value.items():
+                                self.log(f"vkey: {vkey}, vvalue: {vvalue}")
+                                self.spec_attribute_datatable.add_row(vkey, vvalue)
+                                continue
                         else:
                             self.log(f"else: key {key} value: {value}")
                             self.spec_attribute_datatable.add_row(key, value)
@@ -250,16 +256,20 @@ class RunSpec(App):
         """ execute the selected report spec """
         self.selected_name = selected_name
         self.additional_parameters = additional_parameters
+        output_form = "DICT"
         if len(self.additional_parameters) > 0:
             self.log(f"additional_parameters: {self.additional_parameters}")
         else:
             self.log(f"No additional parameters provided")
             self.additional_parameters = {}
+        if self.additional_parameters != None:
+            if "inp_types" in self.additional_parameters:
+                output_form = self.additional_parameters["inp_types"]
 
         self.log(f"Executing report spec: {self.selected_name}")
         try:
             reponse = exec_report_spec(format_set_name=selected_name,
-                                       output_format="DICT",
+                                       output_format=output_form,
                                        view_server=self.view_server,
                                        view_url=self.platform_url,
                                        user=self.user,
@@ -285,8 +295,6 @@ class RunSpec(App):
         self.log(f"self.spec_output_datatable : {self.spec_output_datatable} has been created")
         # self.spec_output_datatable.id = "spec_output_datatable"
         self.log(f"self.spec_output_datatable has been assigned an id : {self.spec_output_datatable.id} ")
-        # self.spec_output_datatable.add_columns("Key", "Value", "Description")
-        # self.log(f"self.spec_output_datatable has been assigned columns {self.spec_output_datatable.columns}")
         # extract data payload from response["data"]. Then populate variables for display
         if isinstance(self.response, dict) and "data" in self.response:
             self.response_data = self.response.get("data")
@@ -307,24 +315,20 @@ class RunSpec(App):
                     if isinstance(value, dict):
                         for vkey, vvalue in value.items():
                             self.log(f"vkey: {vkey}, vvalue: {vvalue}")
-                            # self.spec_output_datatable.add_row(str(vkey), str(vvalue), "")
                             self.rotated_table.setdefault(str(vkey), []).append(vvalue)
                     elif isinstance(value, list):
                         for v in value:
                             self.log(f"v: {v}")
                             self.rotated_table.setdefault(str(v), []).append(" ")
-                            # self.spec_output_datatable.add_row(str(key), str(v), "")
                     elif key == "kind" and value == "empty":
                         key_str: str = "NoData"
                         message: str = "For That Asset Type in this repository"
                         self.log(f"key_str: {key_str}, value_str: {message}")
                         # Present a single consolidated message row under NoData
                         self.rotated_table[key_str] = [message]
-                        # self.spec_output_datatable.add_row(key_str, value_str, "")
                     else:
                         self.log(f"else: key {key} value: {value}")
                         self.rotated_table.setdefault(str(key), []).append(value)
-                        # self.spec_output_datatable.add_row(str(key), str(value), "")
         elif isinstance(self.response_data, dict):
             for key, value in self.response_data.items():
                 self.log(f"key: {key}, value: {value}")
@@ -333,21 +337,17 @@ class RunSpec(App):
                 elif isinstance(value, dict):
                     for vkey, vvalue in value.items():
                         self.rotated_table.setdefault(str(vkey), []).append(vvalue)
-                        # self.spec_output_datatable.add_row(str(vkey), str(vvalue), "")
                 elif isinstance(value, list):
                     for v in value:
                         self.rotated_table.setdefault(str(v), []).append(" ")
-                        # self.spec_output_datatable.add_row(str(key), str(v), "")
                 elif key == "kind" and value == "empty":
                     key_str = "NoData"
                     message = "For That Asset Type in this repository"
                     self.log(f"key_str: {key_str}, value_str: {message}")
                     # Present a single consolidated message row under NoData
                     self.rotated_table[key_str] = [message]
-                    # self.spec_output_datatable.add_row(key_str, value_str, "")
                 else:
                     self.rotated_table.setdefault(str(key), []).append(value)
-                    # self.spec_output_datatable.add_row(str(key), str(value), "")
         # now the rotated table is loaded with data, create the datatable
         keys = list(self.rotated_table.keys())
         for col_key in keys:
@@ -480,16 +480,78 @@ class RunSpec(App):
     def action_quit(self):
         self.exit(200)
 
-    async def action_run_report(self):
+    async def action_prepare_report(self):
         # Build additional parameters from current inputs
+        self.new_additional_parameters = {}
         self.additional_parameters = {}
         if self.inputs_tracker:
+            self.log(f"self.inputs_tracker: {self.inputs_tracker}")
             for _, (parm_name, parm_value) in self.inputs_tracker.items():
                 self.additional_parameters[parm_name] = parm_value
         self.log(f"additional_parameters: {self.additional_parameters}")
         # run report when input fields completed
-        await self.execute_selected_report_spec(self.snode_label, self.additional_parameters)
+        # iterate and strip the inp_ from the front of the key values if present
+        for key, value in self.additional_parameters.items():
+            new_key:str = key.removeprefix("inp_")
+            self.new_additional_parameters.update({new_key: value})
+        self.additional_parameters.clear()
+        # change the types key to output_format if present fior inclusion in parameters dict
+        value = self.new_additional_parameters.get("types")
+        if value:
+            self.new_additional_parameters.update({"output_format": value})
+        else:
+            self.new_additional_parameters.update({"output_format": "DICT"})
+        self.log (f"new_additional_parameters: {self.new_additional_parameters}")
+        self.additional_parameters = self.new_additional_parameters
+        self.log(f"additional_parameters trimmed: {self.additional_parameters}")
+        # Retrieve the output_format value
+        output_form = self.additional_parameters.get("output_format", "FORM")
+        self.log(f"output_format: {output_form}")
+        # if output_format is FORM, we write the report output to a file
+        # if not then we execute the report spec and display the output on the screen
+        if output_form == "FORM":
+            await self.report_to_file(self.snode_label, self.additional_parameters)
+        else:
+            await self.execute_selected_report_spec(self.snode_label, self.additional_parameters)
         return
+
+    async def report_to_file(self, selected_name: str = "", additional_parameters: dict = None):
+        """ execute the selected report spec """
+        # self.selected_name = selected_name
+        # self.additional_parameters = additional_parameters
+        my_additional_parameters: dict = additional_parameters
+        output_form = "FORM"
+        if len(my_additional_parameters) > 0:
+            self.log(f"additional_parameters: {my_additional_parameters}")
+            if "output_format" in my_additional_parameters:
+                output_form = my_additional_parameters.get("output_format")
+                del my_additional_parameters["output_format"]
+            else:
+                output_form = "FORM"
+        else:
+            self.log(f"No additional parameters provided")
+            my_additional_parameters = {}
+
+        self.log(f"Executing report spec: {selected_name}")
+        try:
+            reponse = list_generic(report_spec=selected_name,
+                                   output_format=output_form,
+                                   view_server=self.view_server,
+                                   view_url=self.platform_url,
+                                   user=self.user,
+                                   user_pass=self.password,
+                                   params=my_additional_parameters,
+                                   write_file=True
+                                )
+            self.log(f"Return from exec_report_spec:")
+            self.log(f"reponse: {reponse}")
+        except (ValidationError) as e:
+            self.log(f"ValidationError: {e}")
+            reponse = {"error": f"ValidationError: {e}"}
+        except Exception as e:
+            self.log(f"Exception: {e}")
+            reponse = {"error": f"Exception: {e}"}
+        await self.display_response(reponse)
 
 if __name__ == "__main__":
     app = RunSpec()
