@@ -13,25 +13,32 @@
     customized reports
 
 """
-from __future__ import annotations
-from pyegeria import config
+
 import os
 import re
+import sys
+
+from inflect import pl_sb_U_louse_lice_list
+from textual.widget import WidgetError
+
+# Ensure we're using the local pyegeria, not an installed version
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
+
 from typing import Any
 from loguru import logger
 
 from commands.cat.run_report import list_generic
+from pyegeria import Run_Report
 from pydantic import ValidationError
-from pyegeria.base_report_formats import report_spec_list, select_report_spec
-from pyegeria.format_set_executor import exec_report_spec
 from textual import on
 from textual.app import App
-from textual.containers import Container, Horizontal, HorizontalScroll, ScrollableContainer
-from textual.widgets import Static, Button, DataTable, Header, Footer, Input, Tree, Label
+from textual.containers import Container, Horizontal, ScrollableContainer, HorizontalScroll
+from textual.widgets import Static, Button, DataTable, Header, Footer, Placeholder, Input, Tree, Label
 
 
-class RunSpec(App):
-    CSS_PATH = "experiment1.tcss"
+class MyApp(App):
+    CSS_PATH = "./my_reports.tcss"
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -46,7 +53,7 @@ class RunSpec(App):
         self.view_server = self.Egeria_config[1]
         self.user = self.Egeria_config[2]
         self.password = self.Egeria_config[3]
-        self.selected_report_spec: str = ""
+        self.selected_tech_type: str = ""
         self.items: list = []
         self.created_inputs: list[Input] = []
         self.inputs_tracker: dict[str, list] = {}
@@ -59,8 +66,8 @@ class RunSpec(App):
         self.sub_title = "Report Specification Details"
         yield Header()
         yield Container(
-            Static("Start of report specification list:", id="one_start"),
-            Tree(label="Report Specs", id="spec_tree", classes="trees"),
+            Static("Start of Technology Type list:", id="one_start"),
+            Tree(label="Tech Types", id="tech_table", classes="tables"),
             Static("End of report specification list:", id="one_end"),
             id="container1", classes="box")
         yield Container(
@@ -81,45 +88,53 @@ class RunSpec(App):
         yield Footer()
 
     def on_mount(self):
-        self.spec_tree = self.query_one("#spec_tree", Tree)
-        self.spec_tree.clear()
-        root_data = "A categorized list of PyEgeria report specifications"
-        self.spec_tree.root.expand()
-        self.spec_tree.root.label = "Report Specs"
-        self.spec_tree.root.data = root_data
-        tree_root = self.spec_tree.root
+        # Import here after path is set
+        from pyegeria.format_set_executor import exec_report_spec
+        from pyegeria.base_report_formats import Tech-Type-Processes
+        from pyegeria import list_tech_types
+
+        self.tech_tree = self.query_one("#tech_tree", Tree)
+        self.tech_tree.clear()
+        root_data = "A categorized list of Egeria supported Technology Types"
+        self.tech_tree.root.expand()
+        self.tech_tree.root.label = "Technology Types"
+        self.tech_tree.root.data = root_data
+        tree_root = self.tech_tree.root
         self.family: str = ""
         self.heading = "Report Specs"
         self.subheading = "Select a report spec to execute:"
         self.description = "A list of report specifications, click on one to see its attributes\ns key to run"
 
         try:
-            self.report_spec_list: list = report_spec_list(show_family=True, sort_by_family=True, return_kind="dicts")
-            logger.debug(f"report_spec_list: {self.report_spec_list}, type: {type(self.report_spec_list)}")
+            self.tech_type_list: dict = list_tech_types(
+                # format_set_name="Tech-Type-Processes",
+                output_format="DICT",
+            )
+            logger.debug(f"tech_type_list: {self.tech_type_list}, type: {type(self.tech_type_list)}")
         except Exception as e:
-            logger.debug(f"Error getting report_spec_list: {e}")
+            logger.debug(f"Error getting tech_type_list: {e}")
             import traceback
             logger.debug(traceback.format_exc())
-            self.report_spec_list = []
+            self.tech_type_list = {}
 
-        for spec in self.report_spec_list:
-            if spec.get("family") != self.family:
-                self.family = spec.get("family")
-                family_node = tree_root.add(self.family, data="family_name")
-                family_node.expand()
-                family_node.add(spec.get("name"), data=spec.get("description"))
-                continue
-            else:
-                family_node.add(spec.get("name"), data=spec.get("description"))
-                continue
+        for type in self.tech_type_list:
+            # if ttype.get("family") != self.family:
+            #     self.family = spec.get("family")
+            #     family_node = tree_root.add(self.family, data="family_name")
+            #     family_node.expand()
+            #     family_node.add(spec.get("name"), data=spec.get("description"))
+            #     continue
+            # else:
+            #     family_node.add(spec.get("name"), spec.get("description"))
+            #     continue
         tree_root.collapse_all()
-        self.spec_tree.refresh()
+        self.tech_tree.refresh()
 
-    @on(Tree.NodeSelected, "#spec_tree")
-    async def handle_spec_tree_node_selected(self, message: Tree.NodeSelected):
+    @on(Tree.NodeSelected, "#tech_tree")
+    async def handle_tech_tree_node_selected(self, message: Tree.NodeSelected):
         logger.debug(f"Node Selected, Processing selection")
-        self.selected_report_spec = message.node
-        logger.debug(f"selected_report_spec: {self.selected_report_spec}")
+        self.selected_tech_type = message.node
+        logger.debug(f"selected_tech_type: {self.selected_tech_type}")
         snode = message.node
         logger.debug(f"snode: {snode}", type(snode))
         if snode.data:
@@ -137,34 +152,39 @@ class RunSpec(App):
                 for child in list(inputs_container.children):
                     await child.remove()
             except Exception as e:
+                # if this is first time through there is validly no container to clear
                 logger.debug(f"Exception clearing inputs container: {e} possibly first time through")
+            except WidgetError:
+                # assume this is forst time through and container is not yet created
+                pass
             self.snode_label = snode_label
-            await self.get_named_report_spec_details(snode_label)
+            await self.get_named_tech_type_details(snode_label)
 
         if "DICT" or "FORM" in self.inputs_tracker:
             outlabel = Label("Output Format: DICT to display report on screen, FORM to write to file", id="comment1")
             await inputs_container.mount(outlabel)
 
-    async def get_named_report_spec_details(self, name):
-        """Get the details of a named report spec and render as a flat table. """
+    async def get_named_tech_type_details(self, name):
+        """Get the details of a named report spec and render as a flat table."""
+        from pyegeria.base_report_formats import
 
         self.spec_name = name
-        logger.debug(f"get_named_report_spec_details: {self.spec_name}")
-        selected_report_spec = select_report_spec(self.spec_name, output_type="DICT")
-        logger.debug(f"selected_report_spec: {selected_report_spec}, type: {type(selected_report_spec)}")
-        if selected_report_spec == None:
-            selected_report_spec = {"NoDetails": "No details found for selected report spec"}
+        logger.debug(f"get_named_tech_type_details: {self.spec_name}")
+        selected_tech_type = select_tech_type(self.spec_name, output_type="DICT")
+        logger.debug(f"selected_tech_type: {selected_tech_type}, type: {type(selected_tech_type)}")
+        if selected_tech_type == None:
+            selected_tech_type = {"NoDetails": "No details found for selected report spec"}
         # Normalize the shape of the returned spec → always a dict
-        if isinstance(selected_report_spec, dict) and "data" in selected_report_spec:
-            self.extracted_report_spec: dict = selected_report_spec.get("data") or {}
-        elif isinstance(selected_report_spec, dict):
-            self.extracted_report_spec: dict = selected_report_spec or {}
+        if isinstance(selected_tech_type, dict) and "data" in selected_tech_type:
+            self.extracted_tech_type: dict = selected_tech_type.get("data") or {}
+        elif isinstance(selected_tech_type, dict):
+            self.extracted_tech_type: dict = selected_tech_type or {}
         else:
-            error_text = f"Unknown shape: {selected_report_spec}"
-            self.extracted_report_spec = {"Error": error_text}
+            error_text = f"Unknown shape: {selected_tech_type}"
+            self.extracted_tech_type = {"Error": error_text}
 
-        logger.debug(f"extracted_report_spec: {self.extracted_report_spec}, type: {type(self.extracted_report_spec)}")
-        response_data = self.extracted_report_spec
+        logger.debug(f"extracted_tech_type: {self.extracted_tech_type}, type: {type(self.extracted_tech_type)}")
+        response_data = self.extracted_tech_type
         # Access the datatable used to display report specification attributes
         self.spec_attribute_datatable = self.query_one("#spec_extracted_datatable", DataTable)
         # Ensure columns exist only once
@@ -252,8 +272,10 @@ class RunSpec(App):
         await mount_point.mount(self.spec_attribute_datatable, before="#two_end")
         return
 
-    async def execute_selected_report_spec(self, selected_name: str = "", additional_parameters: dict = None):
+    async def execute_selected_tech_type(self, selected_name: str = "", additional_parameters: dict = None):
         """ execute the selected report spec """
+        from pyegeria.format_set_executor import Run_Report
+
         self.selected_name = selected_name
         self.additional_parameters = additional_parameters
         output_form = "DICT"
@@ -271,7 +293,7 @@ class RunSpec(App):
 
         logger.debug(f"Executing report spec: {self.selected_name}")
         try:
-            reponse = exec_report_spec(format_set_name=selected_name,
+            reponse = exec_tech_type(format_set_name=selected_name,
                                        output_format=output_form,
                                        view_server=self.view_server,
                                        view_url=self.platform_url,
@@ -279,7 +301,7 @@ class RunSpec(App):
                                        user_pass=self.password,
                                        params=self.additional_parameters
                                        )
-            logger.debug(f"Return from exec_report_spec:")
+            logger.debug(f"Return from exec_tech_type:")
             logger.debug(f"reponse: {reponse}")
         except (ValidationError) as e:
             logger.debug(f"ValidationError: {e}")
@@ -489,7 +511,7 @@ class RunSpec(App):
         self.exit(200)
 
     def action_expand_spec_attribute_table(self):
-        self.spec_tree.root.expand_all()
+        self.tech_tree.root.expand_all()
         return
 
     async def action_prepare_report(self):
@@ -524,7 +546,7 @@ class RunSpec(App):
         if output_form == "FORM":
             await self.report_to_file(self.snode_label, self.additional_parameters)
         else:
-            await self.execute_selected_report_spec(self.snode_label, self.additional_parameters)
+            await self.execute_selected_tech_type(self.snode_label, self.additional_parameters)
         return
 
     async def report_to_file(self, selected_name: str = "", additional_parameters: dict = None):
@@ -546,7 +568,7 @@ class RunSpec(App):
 
         logger.debug(f"Executing report spec: {selected_name}")
         try:
-            reponse = list_generic(report_spec=selected_name,
+            reponse = list_generic(tech_type=selected_name,
                                    output_format=output_form,
                                    view_server=self.view_server,
                                    view_url=self.platform_url,
@@ -555,7 +577,7 @@ class RunSpec(App):
                                    params=my_additional_parameters,
                                    write_file=True
                                 )
-            logger.debug(f"Return from exec_report_spec:")
+            logger.debug(f"Return from exec_tech_type:")
             logger.debug(f"reponse: {reponse}")
         except (ValidationError) as e:
             logger.debug(f"ValidationError: {e}")
@@ -566,7 +588,7 @@ class RunSpec(App):
         await self.display_response(reponse)
 
 def start_exp2():
-    app = RunSpec()
+    app = MyApp()
     app.run()
 
 if __name__ == "__main__":

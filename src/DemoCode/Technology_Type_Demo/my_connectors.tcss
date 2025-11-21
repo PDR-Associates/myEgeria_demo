@@ -120,6 +120,10 @@ Text {}
     width: 100%;
     height: auto;
 }
+#tech_table {
+    width: 100%;
+    height: auto;
+}
 #spec_datagrid {
     width: 100%
 }

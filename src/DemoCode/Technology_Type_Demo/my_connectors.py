@@ -11,15 +11,15 @@ from pydantic import ValidationError
 from textual import on
 from textual.app import ComposeResult, App
 from textual.containers import Container, Horizontal, Grid, Vertical
-from textual.widgets import Static, ListView, ListItem, Button, Footer, Header, DataTable
+from textual.widgets import Static, Button, Footer, Header, DataTable, Tree
 
 from pyegeria.base_report_formats import *
 from pyegeria.format_set_executor import exec_report_spec
 
-from tech_type_splash_screen import SplashScreen
-from tech_type_details import TechTypeDetails
+from my_connectors_splash_screen import SplashScreen
+# from tech_type_details import TechTypeDetails
 
-CSS_PATH = ["report_specs.tcss"]
+CSS_PATH = ["my_connectors.tcss"]
 
 class ReportSpec(App):
 
@@ -52,6 +52,7 @@ class ReportSpec(App):
         self.password = self.Egeria_config[3]
         self.selected_tech_type: str = ""
         self.items: list = []
+        self.processes: str = ""
 
     def compose(self) -> ComposeResult:
         self.heading = "Report Specs"
@@ -60,7 +61,6 @@ class ReportSpec(App):
         self.tech_type_list = "Tech-Type-Details"
 
         self.tech_type_datatable: DataTable = DataTable()
-        self.tech_type_datatable.id = "tech_type_datatable"
         self.tech_type_datatable.add_columns("Display Name", "Description", "Qualified Name")
         self.tech_type_datatable.zebra_stripes = True
         self.tech_type_datatable.border = True
@@ -68,25 +68,16 @@ class ReportSpec(App):
         self.tech_type_datatable.cursor_type= "row"
         self.tech_type_list = self.get_tech_type_list()
         self.log(f"tech_type_list: {self.tech_type_list}, type: {type(self.tech_type_list)}")
-        if isinstance(self.tech_type_list, dict):
-            for item in self.tech_type_list:
-                dname=item.get("Display Name")
-                desc = item.get("Description")
-                qname = item.get("Qualified Name")
+
+        for entry in self.tech_type_list:
+                dname = entry.get("Display Name", "No Display Name")
+                qname = entry.get("Qualified Name", "No Qualified Name")
+                desc = entry.get("Description", "No Description")
                 self.tech_type_datatable.add_row(dname, desc, qname)
                 continue
-        else:
-            for item in self.tech_type_list:
-                if isinstance(item, dict):
-                    for entry in item:
-                        dname = entry.get("Display Name")
-                        desc = entry.get("Description")
-                        qname = entry.get("Qualified Name")
-                        self.tech_type_datatable.add_row(dname, desc, qname)
-                        continue
-                else:
-                    self.log(f"Unknown shape in tech_type_list: {item}, type: {type(item)}")
-                    self.tech_type_datatable.add_row("Error", "Unknown shape in tech_type_list", item)
+
+        self.tech_type_datatable.refresh()
+
         yield Header(show_clock=True)
         yield Vertical(
             Static(f"{self.subheading},   {self.description}"),
@@ -94,7 +85,7 @@ class ReportSpec(App):
             id="connection_info")
         yield Container(
             Static(f"Start of Technology Type List:", id="report_start"),
-            DataTable(id="tech_types_datatable"),
+            self.tech_type_datatable,
             Static(f"End of Technology Type List:", id = "report_end"),
             id = "tech_type_data_container",
             )
@@ -122,10 +113,14 @@ class ReportSpec(App):
         selected_row = message.row_key
         selected_item = self.tech_type_datatable.get_row(selected_row)
         self.log(f"Selected item: {selected_item} type: {type(selected_item)}")
-        selected_item_name = str(selected_item[0] or "")
-        selected_item_desc = str(selected_item[1] or "")
-        selected_item_qname = str(selected_item[2] or "")
-        self.selected_tech_type = selected_item_qname
+        selected_item_name = str(selected_item[0] or None)
+        selected_item_desc = str(selected_item[1] or None)
+        selected_item_qname = str(selected_item[2] or None)
+        if selected_item_qname:
+            self.selected_tech_type = selected_item_qname
+        else:
+            self.selected_tech_type = selected_item_name
+
         self.log(f"Selected tech type: {self.selected_tech_type}")
         self.query_selected_tech_type()
 
@@ -160,44 +155,27 @@ class ReportSpec(App):
             self.tech_type_list = self.tech_type_response.get("data")
             self.tech_type_separated = self.unpack_egeria_data(self.tech_type_response)
             self.log(f"tech_type_separated: {self.tech_type_separated}")
-            if isinstance(self.tech_type_separated, list):
-                for entry in self.tech_type_separated:
-                    if isinstance(entry, dict):
-                        ename=entry.get("Display Name")
-                        eqname = entry.get("Qualified Name")
-                        edesc = entry.get("Description")
-                        entry_item = f"{ename}, {edesc}, {edesc}"
-                        self.tech_type_dict.update({ename: entry_item})
-                        continue
-                    elif isinstance(entry, list):
-                        for list_item in entry:
-                            self.log(f"list_item: {list_item}")
-                            self.tech_type_dict.update(list_item)
-                            self.list_unpack.update(list_item)
-                            continue
-                    else:
-                        self.tech_type_dict = {"Error": "Unrecognized data shape in self.tech_type_list"}
-                        continue
-                    continue
-                self.log(f"tech_type_dict: {self.tech_type_dict}")
+
         except Exception as e:
             self.log(f"Exception in get_tech_type_list: {e}")
             self.tech_type_dict = {"Error": f"get_tech_type_list - {e}"}
         except ValidationError as e:
             self.log(f"ValidationError in get_tech_type_list: {e}")
             self.tech_type_dict = {"ValidationError": f"get_tech_type_list - {e}"}
-        return self.tech_type_dict
+        return self.tech_type_separated
 
     def query_selected_tech_type(self):
         # query the selected tech type
         self.log(f"Executing tech type query: {self.selected_tech_type}")
+        self.parms = {"filter": self.selected_tech_type}
         try:
-            response = exec_report_spec(format_set_name="Tech-Types",
-                                       output_format="DICT",
-                                       view_server=self.view_server,
-                                       view_url=self.platform_url,
-                                       user=self.user,
-                                       user_pass=self.password)
+            response = exec_report_spec(format_set_name="Tech-Type-Processes",
+                                        params=self.parms,
+                                        output_format="DICT",
+                                        view_server=self.view_server,
+                                        view_url=self.platform_url,
+                                        user=self.user,
+                                        user_pass=self.password)
             self.log(f"Return from tech type query:")
             self.log(f"reponse: {response}")
         except (ValidationError) as e:
@@ -207,8 +185,20 @@ class ReportSpec(App):
             self.log(f"Exception: {e}")
             response = {"error": f"Exception: {e}"}
         if response is None:
-            response:dict = {"NoData": "No data returned from Egeria for tech types, notify admin"}
-        return response
+            response:dict = {"NoData": "No data returned from Egeria for tech type processes for {self.selected_tech_type}"}
+        # remove superfluous data from response
+        response = self.unpack_egeria_data(response)
+        new_response: dict = {}
+        for key, value in response.items():
+            if key != "Mermaid" or "Mermaid Specification":
+                new_response = {key: value}
+                continue
+            else:
+                # remove the Mermaid fields from the response
+                continue
+
+        # build and display tree of processes for selected tech type
+        self.build_tech_processes_tree(new_response)
 
     def unpack_egeria_data(self, data) -> dict:
         """ Unpack the data returned from Egeria """
@@ -231,33 +221,63 @@ class ReportSpec(App):
                     output_data = {"error": "unknown outer data structure"}
         else:
             output_data = {"error": "not dict or list", "shape": "data to unpack is not a recognized shape"}
+        # return the extracted data (dict)
         return(output_data)
 
-    # def on_report_spec_report_details_back(self, Message) -> None:
-    #     """ Return to the main menu screen """
-    #     self.pop_screen()
-    #
-    # def on_report_spec_report_details_quit(self, Message) -> None:
-    #     """ Quit the application gracefully with a "good" return code (200) """
-    #     self.exit(200)
-    #
-    # def on_report_spec_report_details_continue(self, Message) -> None:
-    #     """ Return to the main menu screen """
-    #     self.pop_screen()
+    def build_tech_processes_tree(self, response_data):
+       """ Create tree of processes for the selected tech_type"""
+       self.response = response_data
+       self.items.clear()
+       self.proc_tree = self.query_one("#proc_tree", Tree)
+       self.proc_tree.clear()
+       root_data = "A list of Processes associated with the selected technology type"
+       self.proc_tree.root.expand()
+       self.proc_tree.root.label = "Associated Processes"
+       self.proc_tree.root.data = root_data
+       tree_root = self.proc_tree.root
+       self.processes = ""
 
-if __name__ == "__main__":
+       for key, value in self.response:
+           if isinstance(value, dict):
+                process_node = tree_root.add_child(key, data = " ")
+                for subkey, subvalue in value.items():
+                    if isinstance(subvalue, dict):
+                        subprocess_node = process_node.add_child(subkey, data = " ")
+                        for subsubkey, subsubvalue in subvalue.items():
+                            subprocess_node.add_leaf(subsubkey, data = subsubvalue)
+                            continue
+                    else:
+                        subprocess_node = process_node.add_leaf(subkey, data = subvalue)
+                        continue
+           else:
+               process_node = tree_root.add_leaf(key, data = value)
+               continue
+
+       # remove the technology type list and mount the processes tree
+       self.query_one("#tech_type_data_container", Container).unmount()
+       self.query_one("#tech_type_data_container", Container).mount(self.proc_tree, before="#report_end")
+       self.query_one("#tech_type_data_container", Container).refresh()
+
+       self.heading = "Available Processes"
+       self.subheading = "Select a Process to fill in required variables:"
+       self.description = "A list of available processes, click on one"
+       # self.tech_processes_tree = TechTypeDetails(self.selected_tech_type, self.response_data)
+
+
+def start_myc():
     try:
         import pydevd_pycharm
         pydevd_pycharm.settrace(
-            "127.0.0.1",  # Ensure it's localhost since your app runs on the same machine as PyCharm
-            port=5679,  # Choose an available port
+            "127.0.0.1",
+            port=5679,
             stdout_to_server=True,
             stderr_to_server=True,
             suspend=False  # Set to False to let the application continue running after starting
-        )
+            )
     except ImportError:
         print("pydevd-pycharm not installed or setup failed. Debugger won't be active.")
     except Exception as e:
+        print(f"Exception setting up debugger: {e}, execution will attempt to continue.")
         pass
 
     app = ReportSpec()
@@ -266,3 +286,6 @@ if __name__ == "__main__":
     os.environ.setdefault("EGERIA_USER", "erinoverview")
     os.environ.setdefault("EGERIA_USER_PASSWORD", "secret")
     app.run()
+
+if __name__ == "__main__":
+    start_myc()

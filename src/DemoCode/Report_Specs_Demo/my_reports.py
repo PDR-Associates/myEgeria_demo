@@ -13,25 +13,30 @@
     customized reports
 
 """
-from __future__ import annotations
-from pyegeria import config
+
 import os
 import re
+import sys
+
+from textual.widget import WidgetError
+
+# Ensure we're using the local pyegeria, not an installed version
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, project_root)
+
 from typing import Any
 from loguru import logger
 
 from commands.cat.run_report import list_generic
 from pydantic import ValidationError
-from pyegeria.base_report_formats import report_spec_list, select_report_spec
-from pyegeria.format_set_executor import exec_report_spec
 from textual import on
 from textual.app import App
-from textual.containers import Container, Horizontal, HorizontalScroll, ScrollableContainer
-from textual.widgets import Static, Button, DataTable, Header, Footer, Input, Tree, Label
+from textual.containers import Container, Horizontal, ScrollableContainer, HorizontalScroll
+from textual.widgets import Static, Button, DataTable, Header, Footer, Placeholder, Input, Tree, Label
 
 
-class RunSpec(App):
-    CSS_PATH = "experiment1.tcss"
+class MyApp(App):
+    CSS_PATH = "./my_reports.tcss"
 
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -81,6 +86,9 @@ class RunSpec(App):
         yield Footer()
 
     def on_mount(self):
+        # Import here after path is set
+        from pyegeria.base_report_formats import report_spec_list
+
         self.spec_tree = self.query_one("#spec_tree", Tree)
         self.spec_tree.clear()
         root_data = "A categorized list of PyEgeria report specifications"
@@ -110,7 +118,7 @@ class RunSpec(App):
                 family_node.add(spec.get("name"), data=spec.get("description"))
                 continue
             else:
-                family_node.add(spec.get("name"), data=spec.get("description"))
+                family_node.add(spec.get("name"), spec.get("description"))
                 continue
         tree_root.collapse_all()
         self.spec_tree.refresh()
@@ -137,7 +145,11 @@ class RunSpec(App):
                 for child in list(inputs_container.children):
                     await child.remove()
             except Exception as e:
+                # if this is first time through there is validly no container to clear
                 logger.debug(f"Exception clearing inputs container: {e} possibly first time through")
+            except WidgetError:
+                # assume this is forst time through and container is not yet created
+                pass
             self.snode_label = snode_label
             await self.get_named_report_spec_details(snode_label)
 
@@ -146,7 +158,8 @@ class RunSpec(App):
             await inputs_container.mount(outlabel)
 
     async def get_named_report_spec_details(self, name):
-        """Get the details of a named report spec and render as a flat table. """
+        """Get the details of a named report spec and render as a flat table."""
+        from pyegeria.base_report_formats import select_report_spec
 
         self.spec_name = name
         logger.debug(f"get_named_report_spec_details: {self.spec_name}")
@@ -254,6 +267,8 @@ class RunSpec(App):
 
     async def execute_selected_report_spec(self, selected_name: str = "", additional_parameters: dict = None):
         """ execute the selected report spec """
+        from pyegeria.format_set_executor import exec_report_spec
+
         self.selected_name = selected_name
         self.additional_parameters = additional_parameters
         output_form = "DICT"
@@ -566,7 +581,7 @@ class RunSpec(App):
         await self.display_response(reponse)
 
 def start_exp2():
-    app = RunSpec()
+    app = MyApp()
     app.run()
 
 if __name__ == "__main__":
