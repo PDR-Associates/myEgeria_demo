@@ -11,13 +11,13 @@ from pydantic import ValidationError
 from textual import on
 from textual.app import ComposeResult, App
 from textual.containers import Container, Horizontal, Grid, Vertical
+from textual.css.query import NoMatches
 from textual.widgets import Static, Button, Footer, Header, DataTable, Tree
 
 from pyegeria.base_report_formats import *
 from pyegeria.format_set_executor import exec_report_spec
 
 from my_connectors_splash_screen import SplashScreen
-# from tech_type_details import TechTypeDetails
 
 CSS_PATH = ["my_connectors.tcss"]
 
@@ -33,8 +33,6 @@ class ReportSpec(App):
         ("escape", "back", "Back"),
     ]
 
-    # CSS_PATH = ["tech_type.tcss"]
-
     class GridChildrenApp(App):
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
@@ -45,6 +43,8 @@ class ReportSpec(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.tech_type_datatable: DataTable = DataTable()
+        self.tech_type_datatable.id="tech_type_datatable"
         self.Egeria_config = ["https://127.0.0.1:9443", "qs-view-server", "erinoverview", "secret"]
         self.platform_url = self.Egeria_config[0]
         self.view_server = self.Egeria_config[1]
@@ -59,8 +59,7 @@ class ReportSpec(App):
         self.subheading = "Select a report spec to execute:"
         self.description = "Select a report spec to execute."
         self.tech_type_list = "Tech-Type-Details"
-
-        self.tech_type_datatable: DataTable = DataTable()
+        self.log(f"tech_type_datatable: {self.tech_type_datatable}, id: {self.tech_type_datatable.id}")
         self.tech_type_datatable.add_columns("Display Name", "Description", "Qualified Name")
         self.tech_type_datatable.zebra_stripes = True
         self.tech_type_datatable.border = True
@@ -80,7 +79,7 @@ class ReportSpec(App):
 
         yield Header(show_clock=True)
         yield Vertical(
-            Static(f"{self.subheading},   {self.description}"),
+            Static(f"{self.subheading},   {self.description}", id="tech_type_list_header"),
             Static(f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}"),
             id="connection_info")
         yield Container(
@@ -101,16 +100,18 @@ class ReportSpec(App):
         self.query_one("#connection_info", Vertical).styles.height = "10%"
         self.query_one("#tech_type_data_container", Container).styles.height = "80%"
         self.query_one("#action_row", Horizontal).styles.height = "10%"
-        self.push_screen("splash")
+        # self.push_screen("splash")
+        # self.post_message(SplashScreen.SplashContinue())
 
     def on_splash_screen_splash_continue(self, Message) -> None:
         # continue button pressed on the splash screen, pop the splash screen
         self.pop_screen()
 
     @on(DataTable.RowSelected, "#tech_type_datatable")
-    def handle_datatable_row_selected(self, message: DataTable.RowSelected) -> None:
+    def on_datatable_row_selected(self, event: DataTable.RowSelected) -> None:
+        # def handle_datatable_row_selected(self, message: DataTable.RowSelected) -> None:
         """ Handle ListView selection event """
-        selected_row = message.row_key
+        selected_row = event.row_key
         selected_item = self.tech_type_datatable.get_row(selected_row)
         self.log(f"Selected item: {selected_item} type: {type(selected_item)}")
         selected_item_name = str(selected_item[0] or None)
@@ -186,16 +187,23 @@ class ReportSpec(App):
             response = {"error": f"Exception: {e}"}
         if response is None:
             response:dict = {"NoData": "No data returned from Egeria for tech type processes for {self.selected_tech_type}"}
+        if isinstance(response, dict) and "kind" in response:
+            if response.get("kind") == "Empty":
+                response:dict = {"NoData": "No data returned from Egeria for tech type processes for {self.selected_tech_type}"}
         # remove superfluous data from response
         response = self.unpack_egeria_data(response)
-        new_response: dict = {}
-        for key, value in response.items():
-            if key != "Mermaid" or "Mermaid Specification":
-                new_response = {key: value}
-                continue
-            else:
-                # remove the Mermaid fields from the response
-                continue
+        new_response: list[dict] = [{}]
+        counter = 0
+        for item in response:
+            for key, value in item.items():
+                if key != "Mermaid" or "Mermaid Specification":
+                    new_response[counter].update({key: value})
+                    continue
+                else:
+                    # omit the Mermaid fields from the response
+                    continue
+            counter += 1
+            continue
 
         # build and display tree of processes for selected tech type
         self.build_tech_processes_tree(new_response)
@@ -221,6 +229,7 @@ class ReportSpec(App):
                     output_data = {"error": "unknown outer data structure"}
         else:
             output_data = {"error": "not dict or list", "shape": "data to unpack is not a recognized shape"}
+        self.log(f"output_data: {output_data}, {type(output_data)}")
         # return the extracted data (dict)
         return(output_data)
 
@@ -228,33 +237,62 @@ class ReportSpec(App):
        """ Create tree of processes for the selected tech_type"""
        self.response = response_data
        self.items.clear()
-       self.proc_tree = self.query_one("#proc_tree", Tree)
-       self.proc_tree.clear()
+       try:
+           self.proc_tree = self.query_one("#proc_tree", Tree)
+           self.proc_tree.clear()
+       except NoMatches:
+           self.proc_tree: Tree = Tree("Processes", id = "proc_tree")
+       except Exception as e:
+           self.log(f"Exception building tree: {e}")
+           self.exit(400)
        root_data = "A list of Processes associated with the selected technology type"
-       self.proc_tree.root.expand()
+       self.proc_tree.auto_expand=True
+       # self.proc_tree.root.expand()
        self.proc_tree.root.label = "Associated Processes"
        self.proc_tree.root.data = root_data
        tree_root = self.proc_tree.root
        self.processes = ""
 
-       for key, value in self.response:
-           if isinstance(value, dict):
-                process_node = tree_root.add_child(key, data = " ")
-                for subkey, subvalue in value.items():
-                    if isinstance(subvalue, dict):
-                        subprocess_node = process_node.add_child(subkey, data = " ")
-                        for subsubkey, subsubvalue in subvalue.items():
-                            subprocess_node.add_leaf(subsubkey, data = subsubvalue)
+       if not self.response:
+           response_message = f"No data returned from Egeria for tech type processes for {self.selected_tech_type}"
+           self.response = [{"Display Name": response_message}]
+       if type(self.response) is dict:
+           self.response = [self.response]
+       if not isinstance(self.response, list):
+           self.response = [self.response]
+       self.log(f"response: {self.response}", type(self.response), len(self.response))
+       for item in self.response:
+           process_node = tree_root.add(str(item.get("Display Name")), expand=True)
+           if len(self.response) > 0 and len(self.response[0]) >= 2:
+                for key, value in self.response:
+                   if isinstance(value, dict):
+                        self.log(f"key: {key}, {type(key)}, {value}")
+                        sub_node = process_node.add(label=(str(key)), expand=True)
+                        for subkey, subvalue in value.items():
+                            if isinstance(subvalue, dict):
+                                self.log(f"subkey: {subkey}, {type(subkey)}, {subvalue}")
+                                subprocess_node = sub_node.add(label=(str(subkey)), expand=True)
+                                for subsubkey, subsubvalue in subvalue.items():
+                                    self.log(f"subsubkey: {subsubkey}, {type(subsubkey)}, {subsubvalue}")
+                                    subprocess_node.add_leaf(label=(str(subsubkey)), expand=True)
+                                    continue
+                            else:
+                                self.log(f"subkey: {subkey}, {type(subkey)}, {subvalue}")
+                                subprocess_node = sub_node.add_leaf(label=(str(subkey)), expand=True)
+                                continue
+                        else:
+                            self.log(f"key: {key}, {type(key)}, {value}")
+                            sub_node = tree_root.add_leaf(label=(str(key)), expand=True)
                             continue
-                    else:
-                        subprocess_node = process_node.add_leaf(subkey, data = subvalue)
-                        continue
+                   else:
+                       process_node.add_leaf(label=(str(key)), expand=True)
+                       continue
            else:
-               process_node = tree_root.add_leaf(key, data = value)
-               continue
+                #if there is no input, skip
+                continue
 
        # remove the technology type list and mount the processes tree
-       self.query_one("#tech_type_data_container", Container).unmount()
+       self.query_one("#tech_type_data_container", Container).remove()
        self.query_one("#tech_type_data_container", Container).mount(self.proc_tree, before="#report_end")
        self.query_one("#tech_type_data_container", Container).refresh()
 
