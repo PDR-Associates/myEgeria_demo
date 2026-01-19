@@ -12,6 +12,7 @@ from textual import on
 from textual.app import ComposeResult, App
 from textual.containers import Container, Horizontal, Grid, Vertical
 from textual.css.query import NoMatches
+from textual.screen import Screen
 from textual.widgets import Static, Button, Footer, Header, DataTable, Tree
 
 from pyegeria.base_report_formats import *
@@ -21,11 +22,56 @@ from my_connectors_splash_screen import SplashScreen
 
 CSS_PATH = ["my_connectors.tcss"]
 
+class MainScreen(Screen):
+    def compose(self) -> ComposeResult:
+        self.heading = "Report Specs"
+        self.subheading = "Select a report spec to execute:"
+        self.description = "Select a report spec to execute."
+        # self.tech_type_list = "Tech-Type-Details"
+        # self.log(f"tech_type_datatable: {self.tech_type_datatable}, id: {self.tech_type_datatable.id}")
+
+        self.tech_type_list = self.get_tech_type_list()
+        self.log(f"tech_type_list: {self.tech_type_list}, type: {type(self.tech_type_list)}")
+        try:
+            self.tech_type_datatable = self.query_one("#tech_type_datatable", DataTable)
+            self.tech_type_datatable.clear()
+
+        except NoMatches:
+            self.tech_type_datatable: DataTable = DataTable(id="tech_type_datatable")
+
+        for entry in self.tech_type_list:
+                dname = entry.get("Display Name", "No Display Name")
+                qname = entry.get("Qualified Name", "No Qualified Name")
+                desc = entry.get("Description", "No Description")
+                self.tech_type_datatable.add_row(dname, desc, qname)
+                continue
+
+        self.tech_type_datatable.refresh()
+
+        yield Header(show_clock=True)
+        yield Vertical(
+            Static(f"{self.subheading},   {self.description}", id="tech_type_list_header"),
+            Static(f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}"),
+            id="connection_info")
+        yield Container(
+            Static(f"Start of Technology Type List:", id="report_start"),
+            self.tech_type_datatable,
+            Static(f"End of Technology Type List:", id = "report_end"),
+            id = "tech_type_data_container",
+            )
+        yield Horizontal(
+            Button("Quit", id="quit"),
+            Button("Back", id="back"),
+            id="action_row"
+            )
+        yield Footer()
+
 class ReportSpec(App):
 
     SCREENS = {
         "splash": SplashScreen,
-        "tech_type_details": "tech_type_details"
+        "tech_type_details": "tech_type_details",
+        "_default": MainScreen,
     }
 
     BINDINGS = [
@@ -53,6 +99,7 @@ class ReportSpec(App):
         self.selected_tech_type: str = ""
         self.items: list = []
         self.processes: str = ""
+        self.push_screen("splash")
 
     def compose(self) -> ComposeResult:
         self.heading = "Report Specs"
@@ -96,16 +143,18 @@ class ReportSpec(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        # push the main screen and the splash screen onto the stack so the queries will work correctly
+        self.push_screen("_default")
+        self.push_screen("splash")
         # Apply heights after DOM is built
         self.query_one("#connection_info", Vertical).styles.height = "10%"
         self.query_one("#tech_type_data_container", Container).styles.height = "80%"
         self.query_one("#action_row", Horizontal).styles.height = "10%"
-        # self.push_screen("splash")
-        # self.post_message(SplashScreen.SplashContinue())
+
 
     def on_splash_screen_splash_continue(self, Message) -> None:
         # continue button pressed on the splash screen, pop the splash screen
-        self.pop_screen()
+        self.push_screen("_default")
 
     @on(DataTable.RowSelected, "#tech_type_datatable")
     def on_datatable_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -123,7 +172,7 @@ class ReportSpec(App):
             self.selected_tech_type = selected_item_name
 
         self.log(f"Selected tech type: {self.selected_tech_type}")
-        self.query_selected_tech_type()
+        self.query_selected_tech_type(self.selected_tech_type)
 
     @on(Button.Pressed, "#quit")
     def handle_button_pressed(self, event: Button.Pressed) -> None:
@@ -139,7 +188,6 @@ class ReportSpec(App):
         self.tech_type_list = ""
         self.selected_tech_type = ""
         self.items.clear()
-        self.switch_screen("splash")
 
     def get_tech_type_list(self):
         """ Get the list of tech types """
@@ -165,7 +213,8 @@ class ReportSpec(App):
             self.tech_type_dict = {"ValidationError": f"get_tech_type_list - {e}"}
         return self.tech_type_separated
 
-    def query_selected_tech_type(self):
+    def query_selected_tech_type(self, tech_type: str):
+        self.selected_tech_type = tech_type
         # query the selected tech type
         self.log(f"Executing tech type query: {self.selected_tech_type}")
         self.parms = {"filter": self.selected_tech_type}
@@ -314,6 +363,7 @@ def start_myc():
             )
     except ImportError:
         print("pydevd-pycharm not installed or setup failed. Debugger won't be active.")
+        pass
     except Exception as e:
         print(f"Exception setting up debugger: {e}, execution will attempt to continue.")
         pass
@@ -326,4 +376,10 @@ def start_myc():
     app.run()
 
 if __name__ == "__main__":
-    start_myc()
+    # start_myc()
+    app = ReportSpec()
+    os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
+    os.environ.setdefault("EGERIA_VIEW_SERVER", "qs-view-server")
+    os.environ.setdefault("EGERIA_USER", "erinoverview")
+    os.environ.setdefault("EGERIA_USER_PASSWORD", "secret")
+    app.run()

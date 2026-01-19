@@ -62,6 +62,8 @@ class MyApp(App):
         self.rotated_table: dict[str, list[str]] = {}
         self.node_status: str = "Expanded"
         self.node_id: str = ""
+        self.additional_parameters = {}
+        self.selected_name: str = ""
 
     def compose(self):
         # compose the main screen (_default)
@@ -154,6 +156,7 @@ class MyApp(App):
         snode_label: str = event.node.label
         snode_data:str = event.node.data
         self.selected_report_spec = str(event.node.label)
+        self.snode_label = snode_label.plain
         logger.debug(f"selected_report_spec: {self.selected_report_spec}")
 
         # Process the selected node
@@ -255,6 +258,8 @@ class MyApp(App):
             logger.debug(f"Exception mounting output label: {e}")
             # this is just a problem mounting the label so we will log, ignore and continue
             pass
+
+        return
 
     async def get_named_report_spec_details(self, name):
         """Get the details of a named report spec and render as a flat table."""
@@ -397,24 +402,27 @@ class MyApp(App):
         await mount_point.mount(self.spec_attribute_datatable, before="#two_end")
         return
 
-    async def execute_selected_report_spec(self, selected_name: str = "", additional_parameters: dict = None):
+    async def execute_selected_report_spec(self, selected_name: str, additional_parameters: dict = None):
         """ execute the selected report spec """
+        self.log(f"execute_selected_report_spec: {selected_name}, {additional_parameters}")
         try:
             from pyegeria.format_set_executor import exec_report_spec
         except NameError:
             self.log(f"Name Error Unable to import exec_report_spec from pyegeria.format_set_executor")
             raise NameError("Unable to import exec_report_spec from pyegeria.format_set_executor")
-            return
         except ImportError:
             # I assume that this is because the imported name is already imported
+            self.log(f"Import Error Unable to import exec_report_spec from pyegeria.format_set_executor")
+            self.log(f" Code assumes that this is because the imported name is already imported")
+            self.log(f" If this is not the case, then the run report will fail")
             pass
         # create working variable for the data passed in
-        self.selected_name = selected_name
+        self.selected_name:str = str(selected_name)
         self.additional_parameters = additional_parameters
         # set the default for the output format to DICT, which displays the report on the screen
         output_form = "DICT"
+        # check if additional parameters have been provided
         if len(self.additional_parameters) > 0:
-            # check if additional parameters have been provided
             logger.debug(f"additional_parameters: {self.additional_parameters}")
             for key, value in self.additional_parameters.items():
                 # check if the values are string True or False, if so convert to boolean
@@ -425,29 +433,31 @@ class MyApp(App):
             # if no additional parameters have been provided, ensure the table is empty
             logger.debug(f"No additional parameters provided")
             self.additional_parameters = {}
-        if self.additional_parameters != None:
+        if self.additional_parameters:
             # where we have additional parameters, check for the output format parameter which is
             # issued separately in the call to pyegeria
-            # inp_types is an alternate name for output_format but used inside additional parameters
-            if "inp_types" in self.additional_parameters:
-                # make sure we are not trying to use both forms of parameter specification
-                output_form = ""
             if "output_format" in self.additional_parameters:
-                output_form = self.additional_parameters["output_format"]
+                output_form: str = str(self.additional_parameters["output_format"], "DICT")
                 del self.additional_parameters["output_format"]
 
-        self.log(f"output_form: {output_form}")
+        self.log(f"output_form: {output_form}, type: {type(output_form)}, length: {len(output_form)}")
         logger.debug(f"Executing report spec: {self.selected_name} with output format: {output_form}")
         logger.debug(f"additional_parameters: {self.additional_parameters}")
-        if output_form == "":
+
+        self.log(f"output form: {output_form}")
+        self.log(f"format set name: {self.selected_name}, additional parameters: {self.additional_parameters}")
+        self.log(f"view server: {self.view_server}, platform_url: {self.platform_url}")
+        self.log(f"user: {self.user}, password: {self.password}")
+        if len(output_form) > 0:
             try:
-                # run the report spec with no output format specified in the regular parameter list
-                response = exec_report_spec(format_set_name=selected_name,
+                # run the report spec with the output format specified in the regular parameter list
+                response = exec_report_spec(format_set_name=self.selected_name,
+                                            output_format=output_form,
+                                            params=self.additional_parameters,
                                             view_server=self.view_server,
                                             view_url=self.platform_url,
                                             user=self.user,
-                                            user_pass=self.password,
-                                            params=self.additional_parameters
+                                            user_pass=self.password
                                             )
             except (ValidationError) as e:
                 logger.debug(f"ValidationError: {e}")
@@ -459,14 +469,13 @@ class MyApp(App):
                 response = {"error": f"Exception: {e}"}
         else:
             try:
-                # run the report spec with the output format specified in the regular parameter list
-                response = exec_report_spec(format_set_name=selected_name,
-                                           output_format=output_form,
+                # run the report spec without the output format specified in the regular parameter list
+                response = exec_report_spec(format_set_name=self.selected_name,
+                                            params=self.additional_parameters,
                                            view_server=self.view_server,
                                            view_url=self.platform_url,
                                            user=self.user,
                                            user_pass=self.password,
-                                           params=self.additional_parameters
                                            )
                 logger.debug(f"Return from exec_report_spec:")
                 logger.debug(f"reponse: {response}")
@@ -523,6 +532,10 @@ class MyApp(App):
                 for key, value in response_dict.items():
                     # for each item in the list, process the key and value
                     logger.debug(f"key: {key}, value: {value}")
+                    itexists = self.rotated_table.get(str(key), None)
+                    if itexists:
+                        itexists = None
+                        Continue
                     if isinstance(value, dict):
                         # if the value is a dict, process it
                         for vkey, vvalue in value.items():
@@ -550,6 +563,10 @@ class MyApp(App):
             # process data in a dict, similar option and processing as previous code segment
             for key, value in self.response_data.items():
                 logger.debug(f"key: {key}, value: {value}")
+                itexists = self.rotated_table.get(str(key), None)
+                if itexists:
+                    itexists = None
+                    Continue
                 if key == "kind":
                     continue
                 elif isinstance(value, dict):
@@ -808,25 +825,25 @@ class MyApp(App):
         self.additional_parameters = self.new_additional_parameters
         logger.debug(f"additional_parameters trimmed: {self.additional_parameters}")
         # Retrieve the output_format value
-        output_form = self.additional_parameters.get("output_format")
-        # if the output format variable isnt present, check to see if types is
+        output_form = self.additional_parameters.get("output_format", None)
+        # if the output format variable isnt present, check to see if types is, if not default to DICT
         if not output_form:
             output_form = self.additional_parameters.get("types", "DICT")
-
         logger.debug(f"output_format: {output_form}")
         self.log(f"output_format: {output_form}, type: {type(output_form)}")
         # if output_format is FORM, we write the report output to a file
         # if not then we execute the report spec and display the output on the screen
         if output_form == "FORM":
+            self.log(f"Writing report to file for format: {output_form}, {self.snode_label}, {self.additional_parameters}")
             await self.report_to_file(self.snode_label, self.additional_parameters)
         else:
+            self.log(f"Executing report for format: {output_form}, {self.snode_label}, {self.additional_parameters}")
             await self.execute_selected_report_spec(self.snode_label, self.additional_parameters)
         return
 
     async def report_to_file(self, selected_name: str = "", additional_parameters: dict = None):
         """ execute the selected report spec """
-        # self.selected_name = selected_name
-        # self.additional_parameters = additional_parameters
+        my_selected_name = selected_name
         my_additional_parameters: dict = additional_parameters
         # set default value for out put option
         output_form = "DICT"
@@ -843,9 +860,10 @@ class MyApp(App):
             logger.debug(f"No additional parameters provided")
             my_additional_parameters = {}
         # run the report with the parameters provided
-        logger.debug(f"Executing report spec: {selected_name}")
+        logger.debug(f"Executing report spec: {my_selected_name}")
+        response = None
         try:
-            reponse = list_generic(report_spec=selected_name,
+            response = list_generic(report_spec=my_selected_name,
                                    output_format=output_form,
                                    view_server=self.view_server,
                                    view_url=self.platform_url,
@@ -855,15 +873,15 @@ class MyApp(App):
                                    write_file=True
                                 )
             logger.debug(f"Return from exec_report_spec:")
-            logger.debug(f"reponse: {reponse}")
+            logger.debug(f"reponse: {response}")
         except (ValidationError) as e:
             logger.debug(f"ValidationError: {e}")
-            reponse = {"error": f"ValidationError: {e}"}
+            response = {"error": f"ValidationError: {e}"}
         except Exception as e:
             logger.debug(f"Exception: {e}")
-            reponse = {"error": f"Exception: {e}"}
+            response = {"error": f"Exception: {e}"}
         # the response is either the report itself or if written to a file, some metadata related to that file
-        await self.display_response(reponse)
+        await self.display_response(response)
 # program start up cast this way to enable integration with hey_egeria
 def start_exp2():
     app = MyApp()
