@@ -95,7 +95,7 @@ class MyApp(App):
     def on_mount(self):
         # Import the report specifications list function here after path is set
         try:
-            from pyegeria.base_report_formats import report_spec_list
+            from pyegeria.view.base_report_formats import report_spec_list
         except ImportError:
             # If import doesnt work we have a problem!
             raise ImportError("Unable to import report_spec_list from pyegeria.base_report_formats")
@@ -269,7 +269,7 @@ class MyApp(App):
             raise ValueError("Report spec name cannot be empty")
         # Just in time import the select_report_spec function from pyegeria.base_report_formats
         try:
-            from pyegeria.base_report_formats import select_report_spec
+            from pyegeria.view.base_report_formats import select_report_spec
             self.log(f"select_report_spec imported from pyegeria.base_report_formats")
         except NameError:
             # the required import function name isnt recognized
@@ -281,24 +281,24 @@ class MyApp(App):
         logger.debug(f"get_named_report_spec_details: {self.spec_name} type: {type(self.spec_name)}")
         self.log(f"Getting details for report spec: {self.spec_name}, type: {type(self.spec_name)}")
         # retrieve the report specification selected by the user
-        selected_report_spec = select_report_spec(self.spec_name, output_type="DICT")
-        logger.debug(f"selected_report_spec: {selected_report_spec}, type: {type(selected_report_spec)}")
-        self.log(f"selected_report_spec: {selected_report_spec}, type: {type(selected_report_spec)}")
+        self.selected_report_spec = select_report_spec(self.spec_name, output_type="DICT")
+        logger.debug(f"selected_report_spec: {self.selected_report_spec}, type: {type(self.selected_report_spec)}")
+        self.log(f"selected_report_spec: {self.selected_report_spec}, type: {type(self.selected_report_spec)}")
         # if a report spec is not returned
-        if selected_report_spec == None:
+        if self.selected_report_spec == None:
             # Set the selected report spec variable to indicate a report spec was not found
-            selected_report_spec = {"NoDetails": "No details found for selected report spec"}
+            self.selected_report_spec = {"NoDetails": "No details found for selected report spec"}
         # Normalize the shape of the returned spec → always a dict
         # but it may be contained as an element in a higher level construct (", data: ....)
-        if isinstance(selected_report_spec, dict) and "data" in selected_report_spec:
+        if isinstance(self.selected_report_spec, dict) and "data" in self.selected_report_spec:
             # retrieve the dict data inside "data"
-            self.extracted_report_spec: dict = selected_report_spec.get("data") or {}
-        elif isinstance(selected_report_spec, dict):
+            self.extracted_report_spec: dict = self.selected_report_spec.get("data") or {}
+        elif isinstance(self.selected_report_spec, dict):
             # just use the dictionary or set to empty dict if not found at all
-            self.extracted_report_spec: dict = selected_report_spec or {}
+            self.extracted_report_spec: dict = self.selected_report_spec or {}
         else:
             # not a dict, this is an error or perhaps due to a change in pyegeria
-            error_text = f"Unknown shape: {selected_report_spec}"
+            error_text = f"Unknown shape: {self.selected_report_spec}"
             self.extracted_report_spec = {"Error": error_text}
 
         logger.debug(f"extracted_report_spec: {self.extracted_report_spec}, type: {type(self.extracted_report_spec)}")
@@ -406,7 +406,7 @@ class MyApp(App):
         """ execute the selected report spec """
         self.log(f"execute_selected_report_spec: {selected_name}, {additional_parameters}")
         try:
-            from pyegeria.format_set_executor import exec_report_spec
+            from pyegeria.view.format_set_executor import exec_report_spec
         except NameError:
             self.log(f"Name Error Unable to import exec_report_spec from pyegeria.format_set_executor")
             raise NameError("Unable to import exec_report_spec from pyegeria.format_set_executor")
@@ -487,6 +487,7 @@ class MyApp(App):
                 import traceback
                 logger.debug(traceback.format_exc())
                 response = {"error": f"Exception: {e}"}
+        self.log(f"response: {response}")
         # hand the response from the report spec execution to the display_response function
         await self.display_response(response)
         return
@@ -510,15 +511,19 @@ class MyApp(App):
         if isinstance(self.response, dict) and "data" in self.response:
             # the most likely format
             self.response_data = self.response.get("data")
+            self.log(f"response_data is dict with data key: {self.response_data}")
         elif isinstance(self.response, dict):
             # just in case the data is not contained in a "data" key
             self.response_data = self.response
+            self.log(f"response_data is dict without data key: {self.response_data}")
         elif isinstance(self.response, list):
             # just in case the data is returned as a list of dicts
             self.response_data = self.response
+            self.log(f"response_data is list: {self.response_data}")
         else:
             # no data returned, at least in an expected format
             self.response_data = [{"NoData": "No data found for selected item", "Data Content": self.response}]
+            self.log(f"response_data is not a dict or list: {self.response_data}")
         # The data will be returned with each set of data in a "vertical" format
         # for display purposes we need to "rotate" it into a horizontal format
         # so we need a table to hold the rotated data
@@ -529,25 +534,34 @@ class MyApp(App):
                 # process data in a list
                 response_dict = list_item if isinstance(list_item, dict) else {"Value": list_item}
                 logger.debug(f"list_item: {list_item}")
+                self.log(f"processing list item: {list_item}, type: {type(list_item)}")
                 for key, value in response_dict.items():
                     # for each item in the list, process the key and value
                     logger.debug(f"key: {key}, value: {value}")
-                    itexists = self.rotated_table.get(str(key), None)
-                    if itexists:
-                        itexists = None
-                        Continue
-                    if isinstance(value, dict):
+                    self.log(f"processing key: {key}, value: {value}, type: {type(value)}")
+                    if key == "kind" and value == "empty":
+                        # this identifies a dict that contains no data
+                        key_str: str = "NoData"
+                        message: str = "For That Report Type and selected options in this repository"
+                        logger.debug(f"key_str: {key_str}, value_str: {message}")
+                        # Present a single consolidated message row under NoData
+                        self.rotated_table[key_str] = [message]
+                        continue
+                    elif isinstance(value, dict):
                         # if the value is a dict, process it
-                        for vkey, vvalue in value.items():
+                        for vkey, vvalue in value:
                             # we use the key to access the rotated table and append the value to that entry
                             logger.debug(f"vkey: {vkey}, vvalue: {vvalue}")
+                            self.log(f"processing dict items within list: vkey: {vkey}, vvalue: {vvalue}")
                             self.rotated_table.setdefault(str(vkey), []).append(vvalue)
+                            continue
                     elif isinstance(value, list):
                         # if the value is a list, process it
                         for v in value:
                             logger.debug(f"v: {v}")
                             # create an entry for each item in the list with no associated value
                             self.rotated_table.setdefault(str(v), []).append(" ")
+                            continue
                     elif key == "kind" and value == "empty":
                         # this identifies a dict that contains no data
                         key_str: str = "NoData"
@@ -555,45 +569,53 @@ class MyApp(App):
                         logger.debug(f"key_str: {key_str}, value_str: {message}")
                         # Present a single consolidated message row under NoData
                         self.rotated_table[key_str] = [message]
+                        continue
                     else:
                         logger.debug(f"else: key {key} value: {value}")
                         # just process the item as a dict and use its key and value to add to the rotated table
                         self.rotated_table.setdefault(str(key), []).append(value)
+                        continue
         elif isinstance(self.response_data, dict):
             # process data in a dict, similar option and processing as previous code segment
             for key, value in self.response_data.items():
                 logger.debug(f"key: {key}, value: {value}")
                 itexists = self.rotated_table.get(str(key), None)
-                if itexists:
+                if itexists != None:
                     itexists = None
-                    Continue
+                    continue
                 if key == "kind":
                     continue
                 elif isinstance(value, dict):
                     for vkey, vvalue in value.items():
                         self.rotated_table.setdefault(str(vkey), []).append(vvalue)
+                        continue
                 elif isinstance(value, list):
                     for v in value:
                         self.rotated_table.setdefault(str(v), []).append(" ")
+                        continue
                 elif key == "kind" and value == "empty":
                     key_str = "NoData"
                     message = "For That Asset Type in this repository"
                     logger.debug(f"key_str: {key_str}, value_str: {message}")
                     # Present a single consolidated message row under NoData
                     self.rotated_table[key_str] = [message]
+                    continue
                 else:
                     self.rotated_table.setdefault(str(key), []).append(value)
+                    continue
         # now the rotated table is loaded with data, create the datatable
         keys = list(self.rotated_table.keys())
+        self.log(f"rotated table keys: {keys}")
         for col_key in keys:
             # use the keys from the rotated table to create columns in the data table
             self.spec_output_datatable.add_column(str(col_key))
+            continue
         max_rows = max((len(self.rotated_table[k]) for k in keys), default=0)
         for row_idx in range(max_rows):
             # use the values from the rotated table to populate the data table rows
-            row = [str(self.rotated_table[k][row_idx]) if row_idx < len(self.rotated_table[k]) else "" for k in keys]
+            row = [str(self.rotated_table[k][row_idx]) if row_idx <= len(self.rotated_table[k]) else "" for k in keys]
             self.spec_output_datatable.add_row(*row)
-
+            continue
         # Always refresh after populating
         mount_point = self.query_one("#container3", Container)
         await mount_point.mount(self.spec_output_datatable, before="#three_end")
