@@ -85,7 +85,7 @@ class MyApp(App):
             Container(id="input_fields"),
             Static("End of Report Specs Input Fields", classes="box", id="four_end"),
             id="container4", classes="box")
-        yield Container(
+        yield ScrollableContainer(
             Static("Report Specification Output)", classes="box", id="three_start"),
             DataTable(id="spec_output_datatable"),
             Static("End of Report Specification Output)", classes="box", id="three_end"),
@@ -439,7 +439,7 @@ class MyApp(App):
             if "output_format" in self.additional_parameters:
                 output_form: str = str(self.additional_parameters["output_format"], "DICT")
                 del self.additional_parameters["output_format"]
-
+        # self.additional_parameters.update({"page_size": 23})
         self.log(f"output_form: {output_form}, type: {type(output_form)}, length: {len(output_form)}")
         logger.debug(f"Executing report spec: {self.selected_name} with output format: {output_form}")
         logger.debug(f"additional_parameters: {self.additional_parameters}")
@@ -617,7 +617,7 @@ class MyApp(App):
             self.spec_output_datatable.add_row(*row)
             continue
         # Always refresh after populating
-        mount_point = self.query_one("#container3", Container)
+        mount_point = self.query_one("#container3", ScrollableContainer)
         await mount_point.mount(self.spec_output_datatable, before="#three_end")
         self.spec_output_datatable.refresh()
         return
@@ -833,15 +833,6 @@ class MyApp(App):
         for key, value in self.additional_parameters.items():
             new_key:str = key.removeprefix("inp_")
             self.new_additional_parameters.update({new_key: value})
-
-        # self.additional_parameters.clear()
-        # change the types key to output_format if present for inclusion in parameters dict
-        # value = self.new_additional_parameters.get("types")
-        # if value:
-        #     self.new_additional_parameters.update({"output_format": value})
-        #     self.new_additional_parameters.pop("types")
-        # else:
-        #     self.new_additional_parameters.update({"output_format": "DICT"})
 
         self.log (f"new_additional_parameters: {self.new_additional_parameters}")
         self.additional_parameters = self.new_additional_parameters

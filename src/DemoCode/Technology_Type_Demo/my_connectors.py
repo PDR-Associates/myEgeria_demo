@@ -15,8 +15,8 @@ from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Static, Button, Footer, Header, DataTable, Tree
 
-from pyegeria.base_report_formats import *
-from pyegeria.format_set_executor import exec_report_spec
+from pyegeria.view.base_report_formats import *
+from pyegeria.view.format_set_executor import exec_report_spec
 
 from my_connectors_splash_screen import SplashScreen
 
