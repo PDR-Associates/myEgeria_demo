@@ -52,10 +52,9 @@ inflect = "^7.5.0"
 pydantic = "^2.11.7"
 pydantic-settings = "^2.10.1"
 pydevd-pycharm = "*"
-pyegeria = "^5.5.3.25"
+pyegeria = "*"
 textual-dev = "*"
 textual-web = "*"
-
 
 [build-system]
 requires = ["poetry-core"]

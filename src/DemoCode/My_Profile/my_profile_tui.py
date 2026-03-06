@@ -10,11 +10,10 @@ from __future__ import annotations
 import json
 import os
 from typing import Any
+from pyegeria.view import exec_report_spec
+from pyegeria import MyProfile, PyegeriaException, print_basic_exception, AutomatedCuration
 
-from pyegeria import PyegeriaException, print_basic_exception, AutomatedCuration
-from pyegeria.omvs.my_profile import MyProfile
-from pyegeria.view.format_set_executor import exec_report_spec
-from pyegeria import AutomatedCuration as autocuration
+
 from pyegeria import load_app_config, settings, config_logging
 
 from textual.widgets._tree import TreeNode
@@ -273,18 +272,21 @@ class CreateProfileScreen(ModalScreen[int]):
 
     def __init__(self):
         super().__init__()
-        self.view_server = os.getenv("EGERIA_VIEW_SERVER", "qs-view-server")
-        self.user_name = os.getenv("EGERIA_USER", "garygeeke")
-        self.user_password = os.getenv("EGERIA_PASSWORD", "secret")
-        self.platform_url = os.getenv("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
+        # self.view_server = os.getenv("EGERIA_VIEW_SERVER", "qs-view-server")
+        # self.user_name = os.getenv("EGERIA_USER", "garygeeke")
+        # self.user_password = os.getenv("EGERIA_PASSWORD", "secret")
+        # self.platform_url = os.getenv("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
         load_app_config()
         app_config = settings.Environment
         app_user = settings.User_Profile
         # config_logging()
-        print("Platform:", app_config.egeria_platform_url)
-        print("View Server:", app_config.egeria_view_server)
+
         self.user_name = app_user.user_name or "garygeeke"
         self.user_password = app_user.user_pwd or "secret"
+        self.view_server = app_config.egeria_view_server
+        self.platform_url = app_config.egeria_platform_url
+        print("Platform:", app_config.egeria_platform_url)
+        print("View Server:", app_config.egeria_view_server)
 
     def on_mount(self) -> None:
         self.title = f"User: {self.user_name}, Karma Points: {self.user_karma_points}"
@@ -681,7 +683,7 @@ class MyProfileTui(App):
                                                    params={"search_string": self.selected_t_node, "filter_string": self.selected_t_node},
                                                    view_server=self.view_server,
                                                    view_url=self.platform_url,
-                                                   user=self.user,
+                                                   user=self.user_name,
                                                    user_pass=self.user_password)
         except PyegeriaException as e:
             print_basic_exception(e)
@@ -725,13 +727,14 @@ class MyProfileTui(App):
             self.autoc = AutomatedCuration(self.view_server, self.platform_url, self.user_name, self.user_password)
             self.autoc.create_egeria_bearer_token(self.user_name, self.user_password)
             # retrieve the tech type data
+            self.log(f"Fetching technology type hierarchy for tech_type='*'")
 
-            self.tech_type_json = await self.autoc.get_tech_type_hierarchy(
-                                                    tech_type = "*",
-            )
+            self.tech_type_json = await self.autoc._async_get_tech_type_hierarchy(filter_string = "*" )
 
         except Exception as e:
             self.log(f"Exception in get_tech_type_list: {e}")
+            self.log(print_basic_exception(e))
+            self.exit(400)
             self.tech_type_list = [{}]
             return(400)
         self.tech_type_resonse = json.loads(self.tech_type_json)
