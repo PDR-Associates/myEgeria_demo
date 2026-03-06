@@ -366,7 +366,7 @@ class MyApp(App):
                             self.spec_attribute_datatable.add_row(key, value)
                             continue
         elif isinstance(response_data, dict):
-            # if reponse data contains a dict, rather than a lit of dicts
+            # if reponse data contains a dict, rather than a list of dicts
             # processing is the same as the previous code segment for list of dicts
             for key, value in response_data.items():
                 logger.debug(f"key: {key}, value: {value}")
@@ -428,6 +428,10 @@ class MyApp(App):
                 # check if the values are string True or False, if so convert to boolean
                 if value == "True" or value == "False":
                     self.additional_parameters[key] = bool(value)
+                if value == "":
+                    logger.debug(f"value is empty string, deleting key: {key}")
+                    del self.additional_parameters[key]
+                continue
             self.log(f"additional_parameters: {self.additional_parameters}")
         else:
             # if no additional parameters have been provided, ensure the table is empty
@@ -436,9 +440,17 @@ class MyApp(App):
         if self.additional_parameters:
             # where we have additional parameters, check for the output format parameter which is
             # issued separately in the call to pyegeria
+            self.log(f"additional_parameters: {self.additional_parameters}")
             if "output_format" in self.additional_parameters:
                 output_form: str = str(self.additional_parameters["output_format"], "DICT")
                 del self.additional_parameters["output_format"]
+            self.log(f"additional_parameters: {self.additional_parameters}, output_form: {output_form}")
+            for key, value in self.additional_parameters.items():
+                logger.debug(f"key: {key}, value: {value}")
+                if not value:
+                    logger.debug(f"value is empty, deleting key: {key}")
+                    del self.additional_parameters[key]
+
         # self.additional_parameters.update({"page_size": 23})
         self.log(f"output_form: {output_form}, type: {type(output_form)}, length: {len(output_form)}")
         logger.debug(f"Executing report spec: {self.selected_name} with output format: {output_form}")
@@ -549,7 +561,7 @@ class MyApp(App):
                         continue
                     elif isinstance(value, dict):
                         # if the value is a dict, process it
-                        for vkey, vvalue in value:
+                        for vkey, vvalue in value.items():
                             # we use the key to access the rotated table and append the value to that entry
                             logger.debug(f"vkey: {vkey}, vvalue: {vvalue}")
                             self.log(f"processing dict items within list: vkey: {vkey}, vvalue: {vvalue}")
@@ -610,10 +622,13 @@ class MyApp(App):
             # use the keys from the rotated table to create columns in the data table
             self.spec_output_datatable.add_column(str(col_key))
             continue
-        max_rows = max((len(self.rotated_table[k]) for k in keys), default=0)
+        # calculate the number of rows (columns in the rotated table)
+        max_rows: int = max((len(self.rotated_table[k]) for k in keys), default=0)
+        # correct the number since index origin starts at zero not one!
+        max_rows = max_rows - 1
         for row_idx in range(max_rows):
             # use the values from the rotated table to populate the data table rows
-            row = [str(self.rotated_table[k][row_idx]) if row_idx <= len(self.rotated_table[k]) else "" for k in keys]
+            row = [str(self.rotated_table[k][row_idx]) if row_idx < len(self.rotated_table[k]) else "" for k in keys]
             self.spec_output_datatable.add_row(*row)
             continue
         # Always refresh after populating
@@ -634,10 +649,14 @@ class MyApp(App):
         try:
             # get container address for the input fields
             inputs_container = self.query_one("#input_fields", Container)
+            if inputs_container:
+                await inputs_container.remove()
+                inputs_container: Container = Container(id="input_fields")
+                await self.query_one("#container4", ScrollableContainer).mount(inputs_container, before="#four_end")
         except NoMatches:
-            # if we dont find thew container create one
+            # if we dont find the container create one
             logger.debug(f"No container found with id 'input_fields'")
-            inputs_container = Container(id="input_fields")
+            inputs_container: Container = Container(id="input_fields")
             logger.debug(f"input_fields container has been created")
             # find the outside container for the input fields and mount the new container inside it
             await self.query_one("#container4", ScrollableContainer).mount(inputs_container, before="#four_end")
@@ -826,7 +845,9 @@ class MyApp(App):
         if self.inputs_tracker:
             logger.debug(f"self.inputs_tracker: {self.inputs_tracker}")
             for _, (parm_name, parm_value) in self.inputs_tracker.items():
-                self.additional_parameters[parm_name] = parm_value
+                if parm_value:
+                    self.additional_parameters[parm_name] = parm_value
+                    continue
         logger.debug(f"additional_parameters: {self.additional_parameters}")
         # run report when input fields completed
         # iterate and strip the inp_ from the front of the key values if present
@@ -895,6 +916,7 @@ class MyApp(App):
             response = {"error": f"Exception: {e}"}
         # the response is either the report itself or if written to a file, some metadata related to that file
         await self.display_response(response)
+
 # program start up cast this way to enable integration with hey_egeria
 def start_exp2():
     app = MyApp()

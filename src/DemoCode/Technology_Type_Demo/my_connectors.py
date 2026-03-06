@@ -5,6 +5,7 @@
    This file provides a set of report specification related functions for my_egeria.
 
 """
+import asyncio
 import os
 
 from pydantic import ValidationError
@@ -18,66 +19,88 @@ from textual.widgets import Static, Button, Footer, Header, DataTable, Tree
 from pyegeria.view.base_report_formats import *
 from pyegeria.view.format_set_executor import exec_report_spec
 
-from my_connectors_splash_screen import SplashScreen
+# from my_connectors_splash_screen import SplashScreen
 
 CSS_PATH = ["my_connectors.tcss"]
 
-class MainScreen(Screen):
-    def compose(self) -> ComposeResult:
-        self.heading = "Report Specs"
-        self.subheading = "Select a report spec to execute:"
-        self.description = "Select a report spec to execute."
-        # self.tech_type_list = "Tech-Type-Details"
-        # self.log(f"tech_type_datatable: {self.tech_type_datatable}, id: {self.tech_type_datatable.id}")
-
-        self.tech_type_list = self.get_tech_type_list()
-        self.log(f"tech_type_list: {self.tech_type_list}, type: {type(self.tech_type_list)}")
-        try:
-            self.tech_type_datatable = self.query_one("#tech_type_datatable", DataTable)
-            self.tech_type_datatable.clear()
-
-        except NoMatches:
-            self.tech_type_datatable: DataTable = DataTable(id="tech_type_datatable")
-
-        for entry in self.tech_type_list:
-                dname = entry.get("Display Name", "No Display Name")
-                qname = entry.get("Qualified Name", "No Qualified Name")
-                desc = entry.get("Description", "No Description")
-                self.tech_type_datatable.add_row(dname, desc, qname)
-                continue
-
-        self.tech_type_datatable.refresh()
-
-        yield Header(show_clock=True)
-        yield Vertical(
-            Static(f"{self.subheading},   {self.description}", id="tech_type_list_header"),
-            Static(f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}"),
-            id="connection_info")
-        yield Container(
-            Static(f"Start of Technology Type List:", id="report_start"),
-            self.tech_type_datatable,
-            Static(f"End of Technology Type List:", id = "report_end"),
-            id = "tech_type_data_container",
-            )
-        yield Horizontal(
-            Button("Quit", id="quit"),
-            Button("Back", id="back"),
-            id="action_row"
-            )
-        yield Footer()
-
 class ReportSpec(App):
-
-    SCREENS = {
-        "splash": SplashScreen,
-        "tech_type_details": "tech_type_details",
-        "_default": MainScreen,
-    }
 
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("escape", "back", "Back"),
     ]
+
+    class MainScreen(Screen):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+
+        def compose(self) -> ComposeResult:
+                self.heading = "Report Specs"
+                self.subheading = "Select a report spec to execute:"
+                self.description = "Select a report spec to execute."
+                # self.tech_type_list = "Tech-Type-Details"
+                # self.log(f"tech_type_datatable: {self.tech_type_datatable}, id: {self.tech_type_datatable.id}")
+                
+                self.tech_type_list = self.get_tech_type_list()
+                self.log(f"tech_type_list: {self.tech_type_list}, type: {type(self.tech_type_list)}")
+                try:
+                    self.tech_type_datatable = self.query_one("#tech_type_datatable", DataTable)
+                    self.tech_type_datatable.clear()
+
+                except NoMatches:
+                    self.tech_type_datatable: DataTable = DataTable(id="tech_type_datatable")
+
+                for entry in self.tech_type_list:
+                        dname = entry.get("Display Name", "No Display Name")
+                        qname = entry.get("Qualified Name", "No Qualified Name")
+                        desc = entry.get("Description", "No Description")
+                        self.tech_type_datatable.add_row(dname, desc, qname)
+                        continue
+
+                self.tech_type_datatable.refresh()
+
+                yield Header(show_clock=True)
+                yield Vertical(
+                    Static(f"{self.subheading},   {self.description}", id="tech_type_list_header"),
+                    Static(f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}"),
+                    id="connection_info")
+                yield Container(
+                    Static(f"Start of Technology Type List:", id="report_start"),
+                    self.tech_type_datatable,
+                    Static(f"End of Technology Type List:", id = "report_end"),
+                    id = "tech_type_data_container",
+                    )
+                yield Horizontal(
+                    Button("Quit", id="quit"),
+                    Button("Back", id="back"),
+                    id="action_row"
+                    )
+                yield Footer()
+
+        def get_tech_type_list(self):
+            """ Get the list of tech types """
+            self.tech_type_list: list = [{}]
+            self.list_unpack: dict = {}
+            self.tech_type_dict: dict = {}
+            try:
+                self.tech_type_response = exec_report_spec(format_set_name="Tech-Types",
+                                                           output_format="DICT",
+                                                           params={"search_string": "*"},
+                                                           view_server=self.view_server,
+                                                           view_url=self.platform_url,
+                                                           user=self.user,
+                                                           user_pass=self.password)
+                self.tech_type_list = self.tech_type_response.get("data")
+                self.tech_type_separated = ReportSpec.unpack_egeria_data(self.tech_type_response)
+                self.log(f"tech_type_separated: {self.tech_type_separated}")
+            except Exception as e:
+                self.log(f"Exception in get_tech_type_list: {e}")
+                self.tech_type_separated = {"Error": f"get_tech_type_list - {e}"}
+            except ValidationError as e:
+                self.log(f"ValidationError in get_tech_type_list: {e}")
+                self.tech_type_separated = {"ValidationError": f"get_tech_type_list - {e}"}
+            return self.tech_type_separated
+
 
     class GridChildrenApp(App):
         def __init__(self, **kwargs):
@@ -86,6 +109,11 @@ class ReportSpec(App):
         def compose(self):
             self.query_one("#spec_grid", Grid).mount()
             return
+
+    SCREENS = {
+        "tech_type_details": "tech_type_details",
+        "_default": MainScreen
+    }
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -99,62 +127,10 @@ class ReportSpec(App):
         self.selected_tech_type: str = ""
         self.items: list = []
         self.processes: str = ""
-        self.push_screen("splash")
 
-    def compose(self) -> ComposeResult:
-        self.heading = "Report Specs"
-        self.subheading = "Select a report spec to execute:"
-        self.description = "Select a report spec to execute."
-        self.tech_type_list = "Tech-Type-Details"
-        self.log(f"tech_type_datatable: {self.tech_type_datatable}, id: {self.tech_type_datatable.id}")
-        self.tech_type_datatable.add_columns("Display Name", "Description", "Qualified Name")
-        self.tech_type_datatable.zebra_stripes = True
-        self.tech_type_datatable.border = True
-        self.tech_type_datatable.show_header = True
-        self.tech_type_datatable.cursor_type= "row"
-        self.tech_type_list = self.get_tech_type_list()
-        self.log(f"tech_type_list: {self.tech_type_list}, type: {type(self.tech_type_list)}")
-
-        for entry in self.tech_type_list:
-                dname = entry.get("Display Name", "No Display Name")
-                qname = entry.get("Qualified Name", "No Qualified Name")
-                desc = entry.get("Description", "No Description")
-                self.tech_type_datatable.add_row(dname, desc, qname)
-                continue
-
-        self.tech_type_datatable.refresh()
-
-        yield Header(show_clock=True)
-        yield Vertical(
-            Static(f"{self.subheading},   {self.description}", id="tech_type_list_header"),
-            Static(f"Server: {self.view_server} | Platform: {self.platform_url} | User: {self.user}"),
-            id="connection_info")
-        yield Container(
-            Static(f"Start of Technology Type List:", id="report_start"),
-            self.tech_type_datatable,
-            Static(f"End of Technology Type List:", id = "report_end"),
-            id = "tech_type_data_container",
-            )
-        yield Horizontal(
-            Button("Quit", id="quit"),
-            Button("Back", id="back"),
-            id="action_row"
-            )
-        yield Footer()
-
-    def on_mount(self) -> None:
-        # push the main screen and the splash screen onto the stack so the queries will work correctly
-        self.push_screen("_default")
-        self.push_screen("splash")
-        # Apply heights after DOM is built
-        self.query_one("#connection_info", Vertical).styles.height = "10%"
-        self.query_one("#tech_type_data_container", Container).styles.height = "80%"
-        self.query_one("#action_row", Horizontal).styles.height = "10%"
-
-
-    def on_splash_screen_splash_continue(self, Message) -> None:
-        # continue button pressed on the splash screen, pop the splash screen
-        self.push_screen("_default")
+    async def on_mount(self) -> None:
+        # push the main screen onto the stack so the queries will work correctly
+        await self.push_screen("_default")
 
     @on(DataTable.RowSelected, "#tech_type_datatable")
     def on_datatable_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -188,7 +164,7 @@ class ReportSpec(App):
         self.tech_type_list = ""
         self.selected_tech_type = ""
         self.items.clear()
-
+    
     def get_tech_type_list(self):
         """ Get the list of tech types """
         self.tech_type_list: list = [{}]
@@ -197,6 +173,7 @@ class ReportSpec(App):
         try:
             self.tech_type_response = exec_report_spec(format_set_name="Tech-Types",
                                                     output_format="DICT",
+                                                    params = {"search_string": "*"},
                                                     view_server=self.view_server,
                                                     view_url=self.platform_url,
                                                     user=self.user,
@@ -259,7 +236,7 @@ class ReportSpec(App):
 
     def unpack_egeria_data(self, data) -> dict:
         """ Unpack the data returned from Egeria """
-        output_data: dict = {}
+        output_data: list[dict] = [{}]
         output_data.clear()
         if isinstance(data, dict):
             if "data" in data:
@@ -376,7 +353,6 @@ def start_myc():
     app.run()
 
 if __name__ == "__main__":
-    # start_myc()
     app = ReportSpec()
     os.environ.setdefault("EGERIA_PLATFORM_URL", "https://127.0.0.1:9443")
     os.environ.setdefault("EGERIA_VIEW_SERVER", "qs-view-server")
