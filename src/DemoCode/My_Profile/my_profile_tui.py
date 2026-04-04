@@ -226,12 +226,13 @@ class ShopForDataScreen(Screen):
 
     CSS_PATH = "my_profile.tcss"
 
-    def __init__ (self, glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table ) -> Any:
+    def __init__ (self, glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, data_specification_table ) -> Any:
         """Initialize the ShopForDataScreen screen."""
         self.glossary_table: DataTable = glossary_table
         self.digital_product_catalog_table: DataTable = digital_product_catalog_table
         self.data_dictionary_table: DataTable = data_dictionary_table
         self.business_domain_table: DataTable = business_domain_table
+        self.data_specification_table: DataTable = data_specification_table
         super().__init__()
 
     def compose(self) -> ComposeResult:
@@ -243,6 +244,7 @@ class ShopForDataScreen(Screen):
         yield self.digital_product_catalog_table
         yield self.data_dictionary_table
         yield self.business_domain_table
+        yield self.data_specification_table
 
     @on(DataTable.RowSelected, "#glossary_table")
     def handle_glossary_table_selection(self, event: DataTable.RowSelected):
@@ -270,7 +272,7 @@ class ShopForDataScreen(Screen):
     @on(DataTable.RowSelected, "#data_dictionary_table")
     def handle_data_dictionary_table_selection(self, event: DataTable.RowSelected):
         row_selected = event.row_key
-        row_values = self.glossary_table.get_row(row_selected)
+        row_values = self.query_one("#data_dictionary_table", DataTable).get_row(event.row_key)
         row_display_name = row_values[0]
         row_description = row_values[1]
         row_qualified_name = row_values[2]
@@ -280,12 +282,22 @@ class ShopForDataScreen(Screen):
     @on(DataTable.RowSelected, "#business_domain_table")
     def handle_business_domain_table_selection(self, event: DataTable.RowSelected):
         row_selected = event.row_key
-        row_values = self.glossary_table.get_row(row_selected)
+        row_values = self.query_one("#business_domain_table", DataTable).get_row(event.row_key)
         row_qualified_name = row_values[0]
         row_type_name = row_values[1]
         row_guid = row_values[2]
         self.log(f"Row selected: {row_selected}, values: {row_values}, qualified name: {row_qualified_name}, type name: {row_type_name}, guid: {row_guid}")
         self.dismiss (["domain", row_qualified_name, row_type_name])
+
+    @on(DataTable.RowSelected, "#data_specification_table")
+    def handle_data_specification_table_selection(self, event: DataTable.RowSelected):
+        row_selected = event.row_key
+        row_values = self.query_one("#data_specification_table", DataTable).get_row(event.row_key)
+        row_display_name = row_values[0]
+        row_description = row_values[1]
+        row_qualified_name = row_values[2]
+        self.log(f"Row selected: {row_selected}, values: {row_values}, display name: {row_display_name}, description: {row_description}, qualified name: {row_qualified_name}")
+        self.dismiss (["specification", row_qualified_name, row_display_name])
 
     def action_back(self) -> None:
         """ The back option in the footer has been selected. Dismiss the screen."""
@@ -1478,8 +1490,45 @@ class MyProfileTui(App):
                                                        domain.get("GUID", ""))
                     continue
 
+            # Data Specifications
+            data_specification_table: DataTable = DataTable(id="data_specification_table")
+            data_specification_table.add_columns("Display Name", "Description", "Qualified Name")
+            data_specification_table.cursor_type = "row"
+            data_specification_table.zebra_stripes = True
+            try:
+                self.data_specification_data = exec_report_spec(format_set_name="Data-Specifications",
+                                                                 output_format="DICT",
+                                                                 params = {"search_string": "*"},
+                                                                 view_server=self.view_server,
+                                                                 view_url=self.platform_url,
+                                                                 user=self.user_name,
+                                                                 user_pass=self.user_password)
+            except PyegeriaException as e:
+                self.log(f"Error retrieving data specification details: {e!s}")
+                self.exit(423)
+                return (423)
+
+            if isinstance(self.data_specification_data, dict):
+                self.data_specification_data_extract = self.data_specification_data.get("data")
+            elif isinstance(self.data_specification_data, list):
+                self.data_specification_data_extract = self.data_specification_data
+            else:
+                self.data_specification_data_extract = self.data_specification_data.get("Data-Specifications") or []
+
+            if self.data_specification_data_extract == [] or self.data_specification_data_extract == {} or self.data_specification_data_extract == None:
+                self.log(f"No data specifications found for user {self.user_name}")
+                data_specification_table.add_row("No data specifications found", "No data returned from Egeria", "")
+            else:
+                self.log(f"Found {self.data_specification_data_extract} data specifications for user {self.user_name}")
+
+                for spec in self.data_specification_data_extract:
+                    data_specification_table.add_row(spec.get("Display Name", ""),
+                                                  spec.get("Description", ""),
+                                                  spec.get("Qualified Name", ""))
+                    continue
+
             # hand the data to the Screen for displaying
-            await self.push_screen(ShopForDataScreen(glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table ), callback = self.shop_for_data_callback)
+            await self.push_screen(ShopForDataScreen(glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, data_specification_table ), callback = self.shop_for_data_callback)
 
         elif selected_option == "User Bookmarks":
             pass
@@ -1789,6 +1838,9 @@ class MyProfileTui(App):
         elif selection_type == "glossary":
             self.log(f"Selected glossary with qualified name: {selection_parm_2}")
             self.build_glossary_details(selection_parm_1, selection_parm_2)
+        elif selection_type == "specification"
+            self.log(f"Selected data specification with qualified name: {selection_parm_2}")
+            self.build_data_specification_details(selection_parm_1, selection_parm_2)
         else:
             self.log(f"Unknown selection type: {selection_type}")
             self.exit(429)
@@ -1997,6 +2049,13 @@ class MyProfileTui(App):
                     glossary_tree.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
                 glossary_tree.root.expand()
         self.push_screen(SelectionOverviewScreen("glossary"), callback=self.overview_callback)
+
+    def build_data_specification_details(self, target_qualified_name, target_display_name):
+        """ Build the details object for a data specification details screen"""
+        self.log(f"Building data specification details for qualified name: {target_qualified_name}")
+        self.data_specification_qualified_name = target_qualified_name
+        self.data_specification_display_name = target_display_name
+        build_structure: dict = {}
 
 
 if __name__ == "__main__":
