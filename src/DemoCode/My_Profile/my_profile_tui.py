@@ -53,11 +53,13 @@ class SelectionOverviewScreen(Screen):
             self.data_tree: Tree = app.query_one("#data_dictionary_tree", Tree)
         elif self.category == "domain":
             self.data_tree: Tree = app.query_one("#business_domain_tree", Tree)
+        elif self.category == "specification":
+            self.data_tree: Tree = app.query_one("#data_specification_tree", Tree)
         else:
             # unknown category
             # push status screen, logic error in code.
             error_category = "Collection Category"
-            error_message = "Unkown collection category returned"
+            error_message = "Unknown collection category returned"
             self.log(f"Error in selection overview processing: {error_category}, {error_message}")
             self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
         super().__init__()
@@ -92,6 +94,8 @@ class SelectionOverviewScreen(Screen):
         self.node_selected = event.node
         self.log(f"Node selected: {self.node_selected}")
         self.node_label = self.node_selected.label
+        # the provided id can be either a GUID or a qualified name!
+        # the variable is labeled guid but it could contain a qualified name, both guid and qualified name are strings.
         self.node_GUID = self.node_selected.data
         self.log(f"Node label: {self.node_label}, GUID: {self.node_GUID}")
         if self.node_label == "glossary":
@@ -102,6 +106,8 @@ class SelectionOverviewScreen(Screen):
             self.display_selected_data_dictionary(self.node_GUID)
         elif self.node_label == "business_domain":
             self.display_selected_business_domain(self.node_GUID)
+        elif self.node_label == "data_specification":
+            self.display_selected_data_specification(self.node_GUID)
 
     def display_selected_term_details(self, term_GUID) -> Any:
         """ The user has selected a glossary term, build a display of the term details,
@@ -217,6 +223,37 @@ class SelectionOverviewScreen(Screen):
                      id="business_domain_details_text_area",
                      read_only=True).mount(self.query_one("#business_domain_details_container"))
             TextArea.data = self.business_domain_data
+
+    def display_selected_data_specification(self, data_specification_GUID) -> int:
+        """ The user has selected a data specification, build a display of the specification details
+            and show alongside data specifications tree """
+
+        self.data_specification_qualified_name = data_specification_GUID
+        self.log(f"Data specification selected: {self.data_specification_qualified_name}")
+        try:
+            self_data_specification_data = exec_report_spec(format_set_name="Data-Specification",
+                                                            output_format="DICT",
+                                                            params={"search_string": self.data_specification_qualified_name,
+                                                                    "filter_string": self.data_specification_qualified_name},
+                                                            view_server=self.view_server,
+                                                            view_url=self.platform_url,
+                                                            user=self.user_name,
+                                                            user_pass=self.user_password)
+        except PyegeriaException as e:
+            print_basic_exception(e)
+            self.log(f"Error retrieving data specification details: {e!s}")
+            self.exit(431)
+            return (431)
+        if not self_data_specification_data or self_data_specification_data == []:
+            self.log(f"No data specification data returned for qualified name: {self.data_specification_qualified_name}")
+            Static(f"No data specification data returned for qualified name: {self.data_specification_qualified_name}").mount(
+                self.query_one("#data_specification_details_container"))
+        else:
+            self.log(f"Data specification data returned for qualified name: {self.data_specification_qualified_name}")
+            TextArea(f"Data specification data returned for qualified name: {self.data_specification_qualified_name}",
+                     id="data_specification_details_text_area",
+                     read_only=True).mount(self.query_one("#data_specification_details_container"))
+            TextArea.data = self_data_specification_data
 
 
 class ShopForDataScreen(Screen):
@@ -1171,7 +1208,7 @@ class MyProfileTui(App):
 
     async def on_mount(self) -> None:
         """Load profile; if missing, prompt to create it; then populate tables."""
-        DOMInfo.attach_to(self)
+        # DOMInfo.attach_to(self)
         await self._load_or_create_profile()
         await self._populate_tables()
 
@@ -1838,7 +1875,7 @@ class MyProfileTui(App):
         elif selection_type == "glossary":
             self.log(f"Selected glossary with qualified name: {selection_parm_2}")
             self.build_glossary_details(selection_parm_1, selection_parm_2)
-        elif selection_type == "specification"
+        elif selection_type == "specification":
             self.log(f"Selected data specification with qualified name: {selection_parm_2}")
             self.build_data_specification_details(selection_parm_1, selection_parm_2)
         else:
@@ -1890,9 +1927,9 @@ class MyProfileTui(App):
                 continue
             # Once the structure is complete we can build the tree from it
             for term_subject in build_structure:
-                dictionary_tree.add(Tree(label=term_subject, id=term_subject))
+                dictionary_branch = dictionary_tree.add(Tree(label=term_subject, id=term_subject))
                 for term_qualified_name, term_summary in build_structure[term_subject]:
-                    dictionary_tree.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+                    dictionary_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
                 dictionary_tree.root.expand()
         self.push_screen(SelectionOverviewScreen("dictionary"), callback=self.overview_callback)
 
@@ -1941,9 +1978,9 @@ class MyProfileTui(App):
                 continue
             # Once the structure is complete we can build the tree from it
             for term_subject in build_structure:
-                domain_tree.add(Tree(label=term_subject, id=term_subject))
+                domain_branch = domain_tree.root.add(Tree(label=term_subject, id=term_subject))
                 for term_qualified_name, term_summary in build_structure[term_subject]:
-                    domain_tree.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+                    domain_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
                 domain_tree.root.expand()
         self.push_screen(SelectionOverviewScreen("domain"), callback=self.overview_callback)
 
@@ -1992,9 +2029,9 @@ class MyProfileTui(App):
                 continue
             # Once the structure is complete we can build the tree from it
             for term_subject in build_structure:
-                catalog_tree.add(Tree(label=term_subject, id=term_subject))
+                catalog_branch = catalog_tree.root.add(Tree(label=term_subject, id=term_subject))
                 for term_qualified_name, term_summary in build_structure[term_subject]:
-                    catalog_tree.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+                    catalog_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
                 catalog_tree.root.expand()
         self.push_screen(SelectionOverviewScreen("catalog"), callback=self.overview_callback)
 
@@ -2044,9 +2081,9 @@ class MyProfileTui(App):
                 continue
             # Once the structure is complete we can build the tree from it
             for term_subject in build_structure:
-                glossary_tree.add(Tree(label=term_subject, id=term_subject))
+                glossary_branch = glossary_tree.root.add(Tree(label=term_subject, id=term_subject))
                 for term_qualified_name, term_summary in build_structure[term_subject]:
-                    glossary_tree.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+                    glossary_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
                 glossary_tree.root.expand()
         self.push_screen(SelectionOverviewScreen("glossary"), callback=self.overview_callback)
 
@@ -2055,8 +2092,51 @@ class MyProfileTui(App):
         self.log(f"Building data specification details for qualified name: {target_qualified_name}")
         self.data_specification_qualified_name = target_qualified_name
         self.data_specification_display_name = target_display_name
-        build_structure: dict = {}
 
+        try:
+            self.data_specification_details = exec_report_spec(format_set_name="Data-Specifications",
+                                                  output_format="JSON",
+                                                  params={"search_string": self.data_specification_qualified_name, "filter_string": self.data_specification_qualified_name},
+                                                  view_server=self.view_server,
+                                                               view_url=self.platform_url,
+                                                               user=self.user_name,
+                                                               user_pass=self.user_password)
+        except Exception as e:
+            self.log(f"Error retrieving data specification details: {e}")
+            return
+
+        if not self.data_specification_details or self.data_specification_details == None or self.data_specification_details.get("kind") == "empty":
+            self.log(f"No data specification details found for qualified name: {self.data_specification_qualified_name}")
+            error_category = "Data Specification Details"
+            error_message = "No data specification details found"
+            self.log(f"Error retrieving data specification details: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+            return
+
+        self.log(f"Data specification details retrieved successfully for qualified name: {self.data_specification_qualified_name}")
+        self.log(f"Data specification details: {self.data_specification_details}")
+
+        data_spec_tree: Tree = Tree(label=self.data_specification_display_name, id="data_specification_details")
+        data_spec_tree.root.expand()
+        data_spec_tree.auto_expand = True
+        self.data_specification_details_data = self.data_specification_details.get("data")
+        self.log(f"Data specification details data: {self.data_specification_details_data}")
+
+        specified_id = 0
+        for spec in self.data_specification_details_data:
+            spec_qualified_name = spec.get("properties", {}).get("qualifiedName") or ""
+            spec_type = spec.get("properties", {}).get("typeName") or ""
+            spec_description = spec.get("properties", {}).get("description") or ""
+            spec_url = spec.get("properties", {}).get("URL") or ""
+            spec_display_name = spec.get("properties", {}).get("displayName") or ""
+            spec_fixed_label = spec_display_name.replace(" ", "")
+            spec_fixed_label = spec_fixed_label.replace(":", "")
+            self.log(f"Creating tree node for spec: {spec_fixed_label}, with id: {specified_id}")
+            spec_branch = data_spec_tree.root.add(Tree(label=spec_fixed_label, id="id"+str(specified_id), data=[(spec_display_name, spec_qualified_name, spec_type, spec_description, spec_url)]))
+            spec_branch.expand()
+            data_spec_tree.root.expand()
+            specified_id +=1
+        self.push_screen(SelectionOverviewScreen("specification"), callback=self.overview_callback)
 
 if __name__ == "__main__":
     app = MyProfileTui()
