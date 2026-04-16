@@ -1,0 +1,3 @@
+[console_scripts]
+data_products = src.DemoCode:main
+my_egeria = src.main:main

@@ -54,7 +54,7 @@ class TechnologyTypesScreen(ModalScreen):
         yield ScrollableContainer(
             Static("Display technology types in Egeria"),
             self.tech_type_tree,
-            Button("Select", id="select_tech_type_btn"),
+            # Button("Select", id="select_tech_type_btn"),
             id="technology_types_table"
         )
         yield Footer()
@@ -63,15 +63,15 @@ class TechnologyTypesScreen(ModalScreen):
         """ The quit option in the footer has been selected. Dismiss the screen."""
         self.dismiss("200")
 
-    @on(Button.Pressed, "#select_tech_type_btn")
-    def handle_select_tech_type(self, event: Button.Pressed) -> str|None:
-        """ The select button on the screen has been pressed."""
-        self.log(f"Select button pressed, button: {event.button}")
-        if self.selected_t_node:
-            self.log(f"Selected node: {self.selected_t_node}, label: {self.selected_t_node.label}")
-            self.dismiss(str(self.selected_t_node.label))
-        else:
-            return "No technology type selected"
+    # @on(Button.Pressed, "#select_tech_type_btn")
+    # def handle_select_tech_type(self, event: Button.Pressed) -> str|None:
+    #     """ The select button on the screen has been pressed."""
+    #     self.log(f"Select button pressed, button: {event.button}")
+    #     if self.selected_t_node:
+    #         self.log(f"Selected node: {self.selected_t_node}, label: {self.selected_t_node.label}")
+    #         self.dismiss(str(self.selected_t_node.label))
+    #     else:
+    #         return "No technology type selected"
 
     @on(Tree.NodeSelected)
     def handle_tree_node_selected(self, event: Tree.NodeSelected) -> None:
@@ -79,7 +79,8 @@ class TechnologyTypesScreen(ModalScreen):
         self.log(f"Tree node selected, node: {event.node}")
         self.selected_t_node = event.node
         self.selected_t_node_label = event.node.label
-        return
+        self.log(f"Selected node: {self.selected_t_node}, label: {self.selected_t_node.label}")
+        self.dismiss(str(self.selected_t_node.label))
 
     @on(Tree.NodeCollapsed)
     def handle_tree_node_collapsed(self, event: Tree.NodeCollapsed) -> None:

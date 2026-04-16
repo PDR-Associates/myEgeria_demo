@@ -44,5 +44,226 @@ SelectionList {
 Button {
     background: greenyellow;
     color: black;
+}
+#data_specification_details {
+    height: auto;
+    width: auto;
+    background: cadetblue;
+}
+#glossary_details_tree {
+    height: auto;
+    width: auto;
+    background: burlywood;
+}
+#catalog_details {
+    height: auto;
+    width: auto;
+    background: coral;
+}
+#domain_details {
+    height: auto;
+    width: auto;
+    background: darkolivegreen;
+}
+#dictionary_details {
+    height: auto;
+    width: auto;
+    background: darkslateblue;
+}
 
+#actions_table {
+    width: auto;
+    height: auto;
+}
+#business_domain_details_text_area {
+    width: auto;
+    height: auto;
+}
+#business_domain_table {
+    width: auto;
+    height: auto;
+}
+#communities_table {
+    width: auto;
+    height: auto;
+}
+#create_profile_btn {
+    width: auto;
+    height: auto;
+}
+#create_profile_form {
+    width: auto;
+    height: auto;
+}
+#data_details_placeholder {
+    width: auto;
+    height: auto;
+}
+#data_details_placeholder_container {
+    width: auto;
+    height: auto;
+}
+#data_dictionary_details_text_area {
+    width: auto;
+    height: auto;
+}
+#data_dictionary_table {
+    width: auto;
+    height: auto;
+}
+#data_specification_details_text_area {
+    width: auto;
+    height: auto;
+}
+#data_specification_table {
+    width: auto;
+    height: auto;
+}
+#data_tree_container {
+    width: auto;
+    height: auto;
+}
+#digital_product_catalog_table {
+    width: auto;
+    height: auto;
+}
+#digital_product_details_text_area {
+    width: auto;
+    height: auto;
+}
+#glossary_table {
+    width: auto;
+    height: auto;
+}
+#glossary_term_details_text_area {
+    width: auto;
+    height: auto;
+}
+#number_of_processes_label {
+    width: auto;
+    height: auto;
+}
+#number_of_templates_label {
+    width: auto;
+    height: auto;
+}
+#other_function_container {
+    width: auto;
+    height: auto;
+}
+#other_function_list {
+    width: auto;
+    height: auto;
+}
+#process_options {
+    width: auto;
+    height: auto;
+}
+#process_options_container {
+    width: auto;
+    height: auto;
+}
+#process_options_label {
+    width: auto;
+    height: auto;
+}
+#projects_table {
+    width: auto;
+    height: auto;
+}
+#roles_table {
+    width: auto;
+    height: auto;
+}
+#select_process_btn {
+    width: auto;
+    height: auto;
+}
+#select_tech_type_btn {
+    width: auto;
+    height: auto;
+}
+#select_template_btn {
+    width: auto;
+    height: auto;
+}
+#status_message_text_area {
+    width: auto;
+    height: auto;
+}
+#submit_button {
+    width: auto;
+    height: auto;
+}
+#teams_table {
+    width: auto;
+    height: auto;
+}
+#technology_type_templates_input {
+    width: auto;
+    height: auto;
+}
+#technology_types_tree {
+    width: auto;
+    height: auto;
+}
+#template_options {
+    width: auto;
+    height: auto;
+}
+#template_options_container {
+    width: auto;
+    height: auto;
+}
+#template_options_label {
+    width: auto;
+    height: auto;
+}
+#user_description {
+    width: auto;
+    height: auto;
+}
+#user_employee_id {
+    width: auto;
+    height: auto;
+}
+#user_family_name {
+    width: auto;
+    height: auto;
+}
+#user_given_names {
+    width: auto;
+    height: auto;
+}
+#user_identity_table {
+    width: auto;
+    height: auto;
+}
+#user_job_title {
+    width: auto;
+    height: auto;
+}
+#user_preferred_language {
+    width: auto;
+    height: auto;
+}
+#user_preferred_name {
+    width: auto;
+    height: auto;
+}
+#user_pronouns {
+    width: auto;
+    height: auto;
+}
+#user_resident_country {
+    width: auto;
+    height: auto;
+}
+#user_time_zone {
+    width: auto;
+    height: auto;
+}
+#user_title {
+    width: auto;
+    height: auto;
 }

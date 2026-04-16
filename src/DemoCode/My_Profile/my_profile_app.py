@@ -1,4 +1,5 @@
 import datetime
+import re
 
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 from pyegeria import load_app_config, settings, MyProfile, PyegeriaException, print_basic_exception, exec_report_spec, \
@@ -17,6 +18,7 @@ from TechnologyTypeProcessesScreen import TechnologyTypeProcessesScreen
 from StatusScreen import StatusScreen
 from ShopForDataScreen import ShopForDataScreen
 from SelectionOverviewScreen import SelectionOverviewScreen
+from MyTeam import MyTeam
 
 
 class MyProfileApp(App):
@@ -37,7 +39,8 @@ class MyProfileApp(App):
         "tech_type_processes": TechnologyTypeProcessesScreen,
         "status": StatusScreen,
         "shop_4_data": ShopForDataScreen,
-        "overview": SelectionOverviewScreen
+        "overview": SelectionOverviewScreen,
+        "my_team": MyTeam
     }
 
     def __init__(self, *args, **kwargs):
@@ -116,7 +119,6 @@ class MyProfileApp(App):
                 Option("Edit Profile", disabled=True),
                 Option("Subscriptions", disabled=True),
                 Option("Technology Types"),
-                Option("Update Profile", disabled=True),
                 Option("User Bookmarks", disabled=True),
                 id="other_function_list"
             ),
@@ -259,6 +261,8 @@ class MyProfileApp(App):
 
         self.roles_table.clear(columns=True)
         self.roles_table.add_columns("Role Name", "Description","GUID")
+        self.roles_table.zebra = True
+        self.roles_table.cursor_type = "row"
 
         self.teams_table.clear(columns=True)
         self.teams_table.add_columns("Assignment Type", "Team Name", "Description","GUID")
@@ -811,7 +815,6 @@ class MyProfileApp(App):
             self.log(f"Unknown selection type: {selection_type}")
             self.exit(429)
 
-    @work(thread=True, exclusive=True)
     def build_dictionary_details(self, target_qualified_name, target_display_name):
         """ Build the details object for a dictionary details screen"""
         self.log(f"Building dictionary details for qualified name: {target_qualified_name}")
@@ -832,18 +835,18 @@ class MyProfileApp(App):
             self.log(f"Error retrieving dictionary details: {e!s}")
             self.exit(420)
             return (420)
-
+        self.log(f"Dictionary Details: {self.dictionary_details}")
         if not self.dictionary_details or self.dictionary_details == None:
             error_category = "Dictionary Details"
             error_message = "No dictionary details found"
             self.log(f"Error retrieving dictionary details: {error_category}, {error_message}")
             self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
         elif self.dictionary_details.get("kind") == "empty":
-            dictionary_tree: Tree = Tree(label="Empty Dictionary", id="dictionary_details")
+            dictionary_tree: Tree = Tree(label="Empty Dictionary", id="data_dictionary_tree")
             dictionary_tree.root.expand()
             dictionary_tree.root.content = "No dictionary terms found for this dictionary"
         else:
-            dictionary_tree: Tree = Tree(label=self.dictionary_display_name, id="dictionary_details")
+            dictionary_tree: Tree = Tree(label=self.dictionary_display_name, id="data_dictionary_tree")
             dictionary_tree.root.expand()
             dictionary_tree.auto_expand = True
             self.dictionary_details_data = self.dictionary_details.get("data")
@@ -856,17 +859,17 @@ class MyProfileApp(App):
                 continue
             # Once the structure is complete we can build the tree from it
             for term_subject in build_structure:
-                dictionary_branch = dictionary_tree.add(Tree(label=term_subject, id=term_subject))
+                dictionary_branch = dictionary_tree.root.add(term_subject, id=term_subject)
                 for term_qualified_name, term_summary in build_structure[term_subject]:
-                    dictionary_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+                    dictionary_branch.add_leaf(term_summary, data=term_qualified_name)
                 dictionary_tree.root.expand()
         self.push_screen(SelectionOverviewScreen("dictionary",
                                                  self.view_server,
                                                  self.platform_url,
                                                  self.user_name,
-                                                 self.user_password), callback=self.overview_callback)
+                                                 self.user_password,
+                                                 data_tree=dictionary_tree), callback=self.overview_callback)
 
-    @work(thread=True, exclusive=True)
     def build_domain_details(self, target_qualified_name, target_type__name):
         """ Build the details object for a business domain details screen"""
         self.log(f"Building domain details for qualified name: {target_qualified_name}")
@@ -887,45 +890,53 @@ class MyProfileApp(App):
             self.log(f"Error retrieving business domain details: {e!s}")
             self.exit(420)
             return (420)
-
+        self.log(f"domain_details: {self.domain_details}")
         if not self.domain_details or self.domain_details == None:
             error_category = "Business Domain Details"
             error_message = "No domain details found"
             self.log(f"Error retrieving business domain details: {error_category}, {error_message}")
             self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
         elif self.domain_details.get("kind") == "empty":
-            domain_tree: Tree = Tree(label="Empty Business Domain", id="domain_details")
+            domain_tree: Tree = Tree(label="Empty Business Domain", id="business_domain_tree")
             domain_tree.root.expand()
             domain_tree.root.content = "No domain details found for this business domain"
         else:
             self.domain_details_data = self.domain_details.get("data")
-            self.domain_display_name = self.domain_details_data.get("displayName")
-            domain_tree: Tree = Tree(label=self.domain_display_name, id="domain_details")
+            self.log(f"domain_details_data: {self.domain_details_data}")
+            self.domain_display_name = self.domain_details_data.get("Qualified Name")
+            domain_tree: Tree = Tree(label=self.domain_display_name, id="business_domain_tree")
             domain_tree.root.expand()
             domain_tree.auto_expand = True
-            self.domain_details_data = self.domain_details.get("data")
             for term in self.domain_details_data:
                 if term == None:
                     continue
                 term_qualified_name = term.get("Qualified Name") or ""
-                term_subject = term.get("Subject Area") or ""
-                term_summary = term.get("Summary") or ""
+                term_type = term.get("Type Name") or ""
+                term_GUID = term.get("GUID") or ""
+                term_members = term.get("Containing Members")
+                term_memberof = term.get("Member Of")
                 # create dict structure for loading the tree
-                build_structure.update({term_subject: [{term_qualified_name: term_summary}]})
+                build_structure.update({term_qualified_name: [{"term_type": term_type}, {"term_GUID": term_GUID}, {"term_members": term_members},{"term_memberof": term_memberof}]})
                 continue
             # Once the structure is complete we can build the tree from it
-            for term_subject in build_structure:
-                domain_branch = domain_tree.root.add(Tree(label=term_subject, id=term_subject))
-                for term_qualified_name, term_summary in build_structure[term_subject]:
-                    domain_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+            for qualified_name in build_structure:
+                domain_branch = domain_tree.root.add(qualified_name, id=qualified_name, data=[qualified_name.get("term_type"), qualified_name.get("term_GUID")])
+                if build_structure[qualified_name]["term_members"] != None:
+                    domain_branch_members = domain_branch.add("Containing Members")
+                    for member in build_structure[qualified_name]["term_members"]:
+                        domain_branch_members.add_leaf(member)
+                if build_structure[qualified_name]["term_memberof"] != None:
+                    for member in build_structure[qualified_name]["term_memberof"]:
+                        domain_branch.add_leaf(member)
                 domain_tree.root.expand()
+
         self.push_screen(SelectionOverviewScreen("domain",
                                                  self.view_server,
                                                  self.platform_url,
                                                  self.user_name,
-                                                 self.user_password), callback=self.overview_callback)
+                                                 self.user_password,
+                                                 data_tree=domain_tree), callback=self.overview_callback)
 
-    @work(thread=True, exclusive=True)
     def build_catalog_details(self, target_qualified_name, target_display_name):
         """ Build the details object for a catalog details screen"""
         self.log(f"Building catalog details for qualified name: {target_qualified_name}")
@@ -946,18 +957,18 @@ class MyProfileApp(App):
             self.log(f"Error retrieving catalog details: {e!s}")
             self.exit(420)
             return (420)
-
+        self.log(f"catalog_details: {self.catalog_details}")
         if not self.catalog_details or self.catalog_details == None:
             error_category = "Catalog Details"
             error_message = "No catalog details found"
             self.log(f"Error retrieving catalog details: {error_category}, {error_message}")
             self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
         elif self.catalog_details.get("kind") == "empty":
-            catalog_tree: Tree = Tree(label="Empty Catalog", id="catalog_details")
+            catalog_tree: Tree = Tree(label="Empty Catalog", id="digital_product_catalog_tree")
             catalog_tree.root.expand()
             catalog_tree.root.content = "No catalog terms found for this catalog"
         else:
-            catalog_tree: Tree = Tree(label=self.catalog_display_name, id="catalog_details")
+            catalog_tree: Tree = Tree(label=self.catalog_display_name, id="digital_product_catalog_tree")
             catalog_tree.root.expand()
             catalog_tree.auto_expand = True
             self.catalog_details_data = self.catalog_details.get("data")
@@ -978,80 +989,51 @@ class MyProfileApp(App):
                 continue
             # Once the structure is complete we can build the tree from it
             for term_subject in build_structure:
-                catalog_branch = catalog_tree.root.add(Tree(label=term_subject, id=term_subject))
+                catalog_branch = catalog_tree.root.add(term_subject, id=term_subject)
                 for term_qualified_name, term_summary in build_structure[term_subject]:
-                    catalog_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+                    catalog_branch.add_leaf(term_summary, data=term_qualified_name)
                 catalog_tree.root.expand()
         self.push_screen(SelectionOverviewScreen("catalog",
                                                  self.view_server,
                                                  self.platform_url,
                                                  self.user_name,
-                                                 self.user_password), callback=self.overview_callback)
+                                                 self.user_password,
+                                                 data_tree=catalog_tree), callback=self.overview_callback)
 
-    @work(thread=True, exclusive=True)
     def build_glossary_details(self, target_qualified_name, target_display_name):
         """ Build the details object for a glossary details screen"""
         self.log(f"Building glossary details for qualified name: {target_qualified_name}")
         self.glossary_qualified_name = target_qualified_name
         self.glossary_display_name = target_display_name
-        build_structure: dict = {}
-        try:
-            self.glossary_details = exec_report_spec(format_set_name="Glossary-Terms",
-                                                  output_format="JSON",
-                                                  params={"search_string": self.glossary_qualified_name, "filter_string": self.glossary_qualified_name},
-                                                  view_server=self.view_server,
-                                                  view_url=self.platform_url,
-                                                  user=self.user_name,
-                                                  user_pass=self.user_password)
-        except PyegeriaException as e:
-            print_basic_exception(e)
-            self.log(f"Error retrieving glossary details: {e!s}")
-            self.exit(420)
-            return (420)
-
-        self.log(f"glossary_details: {self.glossary_details}")
-
-        if not self.glossary_details or self.glossary_details == None:
-            error_category = "Glossary Details"
-            error_message = "No glossary details found"
-            self.log(f"Error retrieving glossary details: {error_category}, {error_message}")
-            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-        elif self.glossary_details.get("kind") == "empty":
-            glossary_tree: Tree = Tree(label="Empty Glossary", id="glossary_details_tree")
-            glossary_tree.root.expand()
-            glossary_tree.root.content = "No glossary terms found for this glossary"
-        else:
-            glossary_tree: Tree = Tree(label=self.glossary_display_name, id="glossary_details_tree")
-            glossary_tree.root.expand()
-            glossary_tree.auto_expand = True
-
-            self.glossary_details_data = self.glossary_details.get("data")
-
-            if not self.glossary_details_data or self.glossary_details_data == None:
-                error_category = "Glossary Details"
-                error_message = "No glossary details found or the data dict entry is missing"
-                self.log(f"Error retrieving glossary details: {error_category}, {error_message}")
-                self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-                return
-            else:
-                for term in self.glossary_details_data:
-                    if term == None:
-                        continue
-                    term_qualified_name = term.get("Qualified Name") or ""
-                    term_subject = term.get("Subject Area") or ""
-                    term_summary = term.get("Summary") or ""
-                    # create dict structure for loading the tree
-                    build_structure.update({term_subject: [{term_qualified_name: term_summary}]})
-                    continue
-
-            # Once the structure is complete we can build the tree from it
-            for term_subject in build_structure:
-                glossary_branch = glossary_tree.root.add(Tree(label=term_subject, id=term_subject))
-                for term_qualified_name, term_summary in build_structure[term_subject]:
-                    glossary_branch.add_leaf(Tree(label=term_summary, id=term_summary, data=term_qualified_name))
+        
+        for glossary_instance in self.glossary_data_extract:
+            self.glossary_folders = glossary_instance.get("Folders") or None
+            self.log(f"glossary_folders: {self.glossary_folders}")
+            category = "Uncategorised"
+            if self.glossary_folders != None:
+                glossary_tree: Tree = Tree(label=self.glossary_display_name, id="glossary_details_tree")
                 glossary_tree.root.expand()
+                glossary_tree.auto_expand = True
+                for folder in self.glossary_folders:
+                    if "GlossaryCategory" in folder:
+                        category = glossary_tree.root.add(folder)
+                        category.expand()
+                    if "GlossaryTerm" in folder:
+                        term = category.add_leaf(folder)
+                glossary_tree.refresh()
+            else:
+                self.log(f"No glossary folders found in the glossary data extract")
+                folder_category = "Empty Glossary"
+                category = glossary_tree.root.add(folder_category)
+                folder_term = "No glossary terms found for this glossary"
+                category.add_leaf(folder_term)
 
-        self.push_screen(SelectionOverviewScreen("glossary", self.view_server, self.platform_url, self.user_name, self.user_password), callback=self.overview_callback)
+        self.push_screen(SelectionOverviewScreen("glossary",
+                                                 self.view_server,
+                                                 self.platform_url,
+                                                 self.user_name,
+                                                 self.user_password,
+                                                 data_tree=glossary_tree), callback=self.overview_callback)
 
     def build_data_specification_details(self, target_qualified_name, target_display_name):
         """ Build the details object for a data specification details screen"""
@@ -1070,7 +1052,7 @@ class MyProfileApp(App):
         except Exception as e:
             self.log(f"Error retrieving data specification details: {e}")
             return
-
+        self.log(f"data_specification_details: {self.data_specification_details}")
         if not self.data_specification_details or self.data_specification_details == None or self.data_specification_details.get("kind") == "empty":
             self.log(f"No data specification details found for qualified name: {self.data_specification_qualified_name}")
             error_category = "Data Specification Details"
@@ -1082,7 +1064,7 @@ class MyProfileApp(App):
         self.log(f"Data specification details retrieved successfully for qualified name: {self.data_specification_qualified_name}")
         self.log(f"Data specification details: {self.data_specification_details}")
 
-        data_spec_tree: Tree = Tree(label=self.data_specification_display_name, id="data_specification_details")
+        data_spec_tree: Tree = Tree(label=self.data_specification_display_name, id="data_specification_tree")
         data_spec_tree.root.expand()
         data_spec_tree.auto_expand = True
         self.data_specification_details_data = self.data_specification_details.get("data")
@@ -1105,15 +1087,181 @@ class MyProfileApp(App):
             spec_fixed_label = spec_display_name.replace(" ", "")
             spec_fixed_label = spec_fixed_label.replace(":", "")
             self.log(f"Creating tree node for spec: {spec_fixed_label}, with id: {"id"+str(specified_id)}")
-            spec_branch = data_spec_tree.root.add(Tree(label=spec_fixed_label, id="id"+str(specified_id), data=[(spec_display_name, spec_qualified_name, spec_type, spec_description, spec_url)]))
+            spec_branch = data_spec_tree.root.add(spec_fixed_label, id="id"+str(specified_id), data=[(spec_display_name, spec_qualified_name, spec_type, spec_description, spec_url)])
             spec_branch.expand()
             data_spec_tree.root.expand()
             specified_id +=1
-        self.push_screen(SelectionOverviewScreen("specification", self.view_server, self.platform_url, self.user_name, self.user_password), callback=self.overview_callback)
+        self.push_screen(SelectionOverviewScreen("specification",
+                                                 self.view_server,
+                                                 self.platform_url,
+                                                 self.user_name,
+                                                 self.user_password,
+                                                 data_tree=data_spec_tree), callback=self.overview_callback)
 
-    def overview_callback(self):
+    def overview_callback(self, r_code):
         """Callback function for handling overview screen actions."""
-        pass
+        if r_code == 410:
+            error_category = "Collection Category"
+            error_message = "Unknown collection category returned"
+            self.log(f"Error in selection overview processing: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+        elif r_code == 411:
+            error_category = "Glossary"
+            error_message = "query_one no matches found for glossary tree"
+            self.log(f"Error in selection overview processing: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+        elif r_code == 412:
+            error_category = "Digital Product Catalog"
+            error_message = "query_one no matches found for digital product catalog tree"
+            self.log(f"Error in selection overview processing: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+        elif r_code == 413:
+            error_category = "Data Dictionary"
+            error_message = "query_one no matches found for data dictionary tree"
+            self.log(f"Error in selection overview processing: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+        elif r_code == 414:
+            error_category = "Business Domain"
+            error_message = "query_one no matches fround for business domain tree"
+            self.log(f"Error in selection overview processing: {error_category}, {error_message}")
+        elif r_code == 415:
+            error_category = "Data Specification"
+            error_message = "query_one no matches found for data specification tree"
+            self.log(f"Error in selection overview processing: {error_category}, {error_message}")
+        else:
+            # good return from overview screen
+            self.log (f"Overview screen callback, return code : {r_code}")
+            # add more code here
+            pass
+
+    def extract_glossary_terms(self, text):
+        """
+        Extracts GlossaryTerm items from a string structure.
+        Pattern: Starts with 'GlossaryTerm::', ends at the next ','.
+        """
+        # Pattern explanation:
+        # GlossaryTerm::  - Matches the literal prefix
+        # ([^,\']+)       - Captures one or more characters that are NOT a comma or a single quote
+        pattern = r"GlossaryTerm::([^,\']+)"
+
+        # Find all matches in the text
+        matches = re.findall(pattern, text)
+
+        # Clean up whitespace and return as a list
+        return [match.strip() for match in matches]
+
+    def display_glossary_term_details(self, term):
+        """ Displays the details of a GlossaryTerm item"""
+        self.target_term = term
+        try:
+            self.term_details = exec_report_spec(format_set_name="Glossary-Terms",
+                                                  output_format="JSON",
+                                                  params={"search_string": self.target_term, "filter_string": self.target_term},
+                                                  view_server=self.view_server,
+                                                  view_url=self.platform_url,
+                                                  user=self.user_name,
+                                                  user_pass=self.user_password)
+        except PyegeriaException as e:
+            print_basic_exception(e)
+            self.log(f"Error retrieving term details: {e!s}")
+            self.exit(440)
+            return (440)
+
+        self.log(f"term_details: {self.term_details}")
+        if not self.term_details or self.term_details == None:
+            error_category = "Glossary Term Details"
+            error_message = "No glossary term details found"
+            self.log(f"Error retrieving glossary term details: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+        elif self.term_details.get("kind") == "empty":
+            self.log(f"No glossary term details found for qualified name: {self.target_term}")
+            error_category = "Glossary Term Details"
+            error_message = "No glossary term details found"
+            self.log(f"Error retrieving glossary term details: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+
+        self.term_details_data = self.term_details.get("data")
+
+        if not self.term_details_data or self.term_details_data == None:
+            error_category = "Glossary Term Details"
+            error_message = "No glossary term details found or the data dict entry is missing"
+            self.log(f"Error retrieving glossary term details: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+        else:
+            self.term_details_container: ScrollableContainer = self.query_one(DataTable)
+            self.term_details_container.mount()
+            for data_item_key, data_item_value in self.term_details_data.items():
+                Static(f"Field: {data_item_key}, Value: {data_item_value}").mount(self.term_details_container)
+                continue
+        # Once all the fields are complete we can leave it to the screen processing to handle the rest
+        return (200)
+
+    @on(DataTable.RowSelected, "#roles_table")
+    def handle_roles_table_row_selection(self, event):
+        role_table = self.query_one("#roles_table", DataTable)
+        selected_row_key = event.row_key
+        selected_row_data = role_table.get_row(selected_row_key)
+        selected_role_guid = selected_row_data[2]
+        selected_role_name = selected_row_data[0]
+        selected_role_type = selected_row_data[1]
+        self.log(f"Selected role: {selected_row_data}")
+        team_members: list[list] = []
+        if "TeamLeader" in selected_role_name or "TeamLeader" in selected_role_type:
+            self.log(f"Selected role is a TeamLeader: {selected_role_name}")
+            # role_search_key = selected_role_name.replace("TeamLeader", "TeamMembers")
+            role_search_key = selected_role_guid
+            team_member_data = exec_report_spec(format_set_name="Actor-Profiles",
+                                                  output_format="DICT",
+                                                  params={"search_string": role_search_key, "filter_string": role_search_key},
+                                                  view_server=self.view_server,
+                                                  view_url=self.platform_url,
+                                                  user=self.user_name,
+                                                  user_pass=self.user_password)
+            self.log(f"team_member_data: {team_member_data}")
+            if isinstance(team_member_data, dict) and "data" in team_member_data:
+                team_member_data = team_member_data.get("data")
+            elif isinstance(team_member_data, dict) and "data" not in team_member_data:
+                error_category = "Team Member Details"
+                error_message = "No team member details found"
+                self.log(f"Error retrieving team member details: {error_category}, {error_message}")
+                self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+                return (430)
+            elif not team_member_data or team_member_data == None:
+                error_category = "Team Member Details"
+                error_message = "No team member details found"
+                self.log(f"Error retrieving team member details: {error_category}, {error_message}")
+                self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+                return (430)
+            else:
+                error_category = "Team Member Details"
+                error_message = "Unexpected data format for team member details"
+                self.log(f"Error retrieving team member details: {error_category}, {error_message}")
+                self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+                return (430)
+        else:
+            self.log(f"Selected role is not a TeamLeader: {selected_role_name}")
+            team_members[0] = ([f"Selection Error", "Not a teamLeader role, so no TeamMembers to search for", {selected_role_name}])
+
+        # Process team member data for display on screen
+        team_member_properties: list = []
+        for team_member in team_member_data:
+            if isinstance(team_member, list) and "Selection Error" in team_member[0]:
+                team_member_properties.append(team_member)
+                break
+            team_member_properties.append(team_member.get("Display Name"))
+            team_member_properties.append(team_member.get("Role"))
+            team_member_properties.append(team_member.get("Karma Points"))
+        self.log(f"team_member_properties: {team_member_properties}")
+        self.push_screen(MyTeam(team_members, self.user_name), callback=self.my_team_callback)
+
+    def my_team_callback(self, status) -> None:
+        self.log(f"Callback received with status: {status}")
+        if status == 200:
+            self.log("MyTeam screen completed successfully")
+        else:
+            self.log(f"Error in MyTeam screen: {status}")
+        self.pop_screen()
+
 
 if __name__ == "__main__":
     app = MyProfileApp()

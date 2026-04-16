@@ -1,0 +1,50 @@
+Metadata-Version: 2.4
+Name: myegeria
+Version: 0.1.0
+Summary: A textual UI for Egeria
+Author-email: Peter Coldicott <peter.coldicott@pdr-associates.com>
+License: Apache-2.0
+Project-URL: Homepage, https://github.com/odpi/egeria-python
+Project-URL: Repository, https://github.com/odpi/egeria-python
+Keywords: egeria,metadata,governance
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Programming Language :: Python
+Requires-Python: <4.0,>=3.12
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: httpx
+Requires-Dist: rich
+Requires-Dist: validators
+Requires-Dist: urllib3
+Requires-Dist: requests
+Requires-Dist: jupyter
+Requires-Dist: click
+Requires-Dist: trogon<0.7.0,>=0.6.0
+Requires-Dist: textual==8.0.2
+Requires-Dist: mermaid-py
+Requires-Dist: psycopg2-binary<3.0.0,>=2.9.9
+Requires-Dist: jupyter-notebook-parser<0.2.0,>=0.1.4
+Requires-Dist: loguru<0.8.0,>=0.7.3
+Requires-Dist: inflect<8.0.0,>=7.5.0
+Requires-Dist: pydantic<3.0.0,>=2.11.7
+Requires-Dist: pydantic-settings<3.0.0,>=2.10.1
+Requires-Dist: pydevd-pycharm
+Requires-Dist: pyegeria==5.5.4.4
+Requires-Dist: textual-dev
+Requires-Dist: textual-web
+Dynamic: license-file
+
+<!-- SPDX-License-Identifier: CC-BY-4.0 -->
+<!-- Copyright Contributors to the Egeria project. -->
+
+# Egeria
+
+<!-- TODO: Add a README -->
+
+See https://egeria-project.org for the main Egeria Documentation.
+
+This is a new repository that we are currently setting up. 
+
+The content will consist of one or more sample UIs leveraging the Egeria Python API
+
+and the Textual UI framework.

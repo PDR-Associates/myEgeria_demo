@@ -42,7 +42,7 @@ class SelectionOverviewScreen(Screen):
     BINDINGS = [("q", "quit", "Quit"),
                 ("b", "back", "Go back")]
 
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__(self, category, view_server, url, user, pwd):
         self.category = category
@@ -266,7 +266,7 @@ class ShopForDataScreen(Screen):
     BINDINGS = [("q", "dismiss(200)", "Quit"),
                 ("b", "back", "Go back")]
 
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__ (self, glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, data_specification_table ):
         """Initialize the ShopForDataScreen screen."""
@@ -368,7 +368,7 @@ class StatusScreen(ModalScreen[Any]):
                 ("c", "copy GUID to clipboard", "Copy GUID to clipboard"),
                 ]
 
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__(self, status_message: str) -> None:
         """Initialize the StatusScreen screen."""
@@ -413,7 +413,7 @@ class TechnologyTypeProcessesScreen(ModalScreen[Any]):
                 ("b", "back", "Go back"),
                 ("ctl+e", "expand", "Toggle Twisties")]
 
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__ (self,
                   user_name: str,
@@ -526,7 +526,7 @@ class TechnologyTypeTemplatesScreen(ModalScreen[Any]):
                 ("b", "back", "Go back"),
                 ("ctl+e", "expand", "Toggle Twisties")]
 
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__ (self,
                   user_name: str,
@@ -639,7 +639,7 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                 ("b", "back", "Go back"),
                 ("ctl+s", "Select", "tech_type_option_select")]
 
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__(self, tech_type_guid: str,
                        tech_type_name: str,
@@ -871,7 +871,7 @@ class TechnologyTypesScreen(ModalScreen):
     BINDINGS = [("q", "dismiss(200)", "Quit"),
                 ("ctl+e", "expand", "Toggle Twisties")]
 
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__(self, ttlist, user_name, user_pwd, user_kpts):
         """Initialize the TechnologyTypes screen with a list of technology types."""
@@ -1011,7 +1011,7 @@ class CreateProfileScreen(ModalScreen[int]):
     """
 
     BINDINGS = [("q", "dismiss(200)", "Quit")]
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     def __init__(self):
         super().__init__()
@@ -1110,7 +1110,7 @@ class MyProfileTui(App):
     """
 
     BINDINGS = [("q", "quit", "Quit")]
-    CSS_PATH = "my_profile.tcss"
+    CSS_PATH = "../My_Profile/my_profile.tcss"
 
     SCREENS = {
         "create_profile": CreateProfileScreen,

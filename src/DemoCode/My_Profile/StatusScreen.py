@@ -4,16 +4,17 @@ from typing import Any
 from prompt_toolkit.clipboard import ClipboardData
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 from textual.app import ComposeResult
+from textual.containers import ScrollableContainer
 from textual.screen import ModalScreen
-from textual.widgets import Header, TextArea, Footer
+from textual.widgets import Header, TextArea, Footer, Static
 
 
-class StatusScreen(ModalScreen[Any]):
+class StatusScreen(ModalScreen):
     """Modal screen to display the status of the application."""
     BINDINGS = [("q", "quit", "Quit"),
                 ("return", "successful", "Continue"),
                 ("b", "unsuccessful", "Bad result"),
-                ("c", "copy GUID to clipboard", "Copy GUID to clipboard"),
+                ("c", "copy GUID to clipboard", "Copy GUID to clipboard", )
                 ]
 
     CSS_PATH = "my_profile.tcss"
@@ -27,7 +28,10 @@ class StatusScreen(ModalScreen[Any]):
     def compose(self) -> ComposeResult:
         """ Compose the UI components for the StatusScreen screen."""
         yield Header(show_clock=True)
-        yield TextArea(self.status_message, id="status_message_text_area", read_only=True)
+        yield ScrollableContainer(
+            Static("Status"),
+            TextArea(self.status_message, id="status_message_text_area", read_only=True),
+            Static("End of Status"))
         yield Footer()
 
     def action_quit(self) -> None:

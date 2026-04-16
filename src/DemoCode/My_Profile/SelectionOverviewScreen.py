@@ -1,7 +1,10 @@
+from typing import Any
+
 from pyegeria import exec_report_spec, PyegeriaException, print_basic_exception
 from textual import app, on
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.widgets import Tree, Header, Static, Placeholder, Footer, TextArea
 
@@ -15,29 +18,48 @@ class SelectionOverviewScreen(Screen):
 
     CSS_PATH = "my_profile.tcss"
 
-    def __init__(self, category, view_server, url, user, pwd):
+    def __init__(self, category, view_server, url, user, pwd, data_tree=None):
         self.category = category
         self.view_server = view_server
         self.platform_url = url
         self.user_name = user
         self.user_password = pwd
-        if self.category == "glossary":
-            self.data_tree: Tree = app.query_one("#glossary_details_tree", Tree)
-        elif self.category == "catalog":
-            self.data_tree: Tree = app.query_one("#digital_product_catalog_tree", Tree)
-        elif self.category == "dictionary":
-            self.data_tree: Tree = app.query_one("#data_dictionary_tree", Tree)
-        elif self.category == "domain":
-            self.data_tree: Tree = app.query_one("#business_domain_tree", Tree)
-        elif self.category == "specification":
-            self.data_tree: Tree = app.query_one("#data_specification_tree", Tree)
-        else:
-            # unknown category
-            # push status screen, logic error in code.
-            error_category = "Collection Category"
-            error_message = "Unknown collection category returned"
-            self.log(f"Error in selection overview processing: {error_category}, {error_message}")
-            app.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=app.status_callback)
+        self.data_tree = data_tree
+
+        if self.data_tree is None:
+            if self.category == "glossary":
+                try:
+                    self.data_tree: Tree = app.query_one("#glossary_details_tree", Tree)
+                except NoMatches:
+                    self.dismiss(411)
+                    return
+            elif self.category == "catalog":
+                try:
+                    self.data_tree: Tree = app.query_one("#digital_product_catalog_tree", Tree)
+                except NoMatches:
+                    self.dismiss(412)
+                    return
+            elif self.category == "dictionary":
+                try:
+                    self.data_tree: Tree = app.query_one("#data_dictionary_tree", Tree)
+                except NoMatches:
+                    self.dismiss(413)
+                    return
+            elif self.category == "domain":
+                try:
+                    self.data_tree: Tree = app.query_one("#business_domain_tree", Tree)
+                except NoMatches:
+                    self.dismiss(414)
+                    return
+            elif self.category == "specification":
+                try:
+                    self.data_tree: Tree = app.query_one("#data_specification_tree", Tree)
+                except NoMatches:
+                    self.dismiss(415)
+                    return
+            else:
+                # unknown category
+                self.dismiss(410)
         super().__init__()
 
     def compose(self) -> ComposeResult:
