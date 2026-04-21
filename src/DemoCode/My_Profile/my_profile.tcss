@@ -5,8 +5,8 @@
 /*   This file provides a set of report specification related functions for my_egeria.             */
 /*                                                                                                 */
 /*    Unless you are running Microsoft's Studio Product with the Textual Extension installed       */
-/*    the file will show multiple errors, for example I use the PyCharm IDE for whoich there are   */
-/* no extensions for Textual, regarless of the errors the file will run correctly with Textual.    */
+/*    the file will show multiple errors, for example I use the PyCharm IDE for which there are    */
+/*    no extensions for Textual, regardless of the errors the file will run correctly with Textual.*/
 /* *********************************************************************************************** */
 
 Screen {
@@ -21,8 +21,6 @@ Screen {
     width: auto;
 }
 SelectionList {
-    padding: 2;
-    border: solid $accent;
     width: 80%;
     height: 80%;
 }
@@ -53,31 +51,46 @@ Button {
 #glossary_details_tree {
     height: auto;
     width: auto;
-    background: burlywood;
+    background: cadetblue;
 }
 #catalog_details {
     height: auto;
     width: auto;
-    background: coral;
+    background: cadetblue;
 }
 #domain_details {
     height: auto;
     width: auto;
-    background: darkolivegreen;
+    background: cadetblue;
 }
 #dictionary_details {
     height: auto;
     width: auto;
-    background: darkslateblue;
+    background: cadetblue;
 }
 
-#actions_table {
-    width: auto;
+#instruction_static {
+    column-span: 2;
     height: auto;
 }
+
+SelectionOverviewScreen {
+    layout: grid;
+    grid-size: 2 3;
+    grid-columns: 1fr 1fr;
+    grid-rows: auto 1fr auto;
+}
+
+SelectionOverviewScreen > Header {
+    column-span: 2;
+}
+
+SelectionOverviewScreen > Footer {
+    column-span: 2;
+}
 #business_domain_details_text_area {
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
 }
 #business_domain_table {
     width: auto;
@@ -96,48 +109,50 @@ Button {
     height: auto;
 }
 #data_details_placeholder {
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
 }
 #data_details_placeholder_container {
-    width: auto;
-    height: auto;
+    width: 1fr;
+    height: 100%;
+    border: solid blue;
 }
 #data_dictionary_details_text_area {
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
 }
 #data_dictionary_table {
     width: auto;
     height: auto;
 }
 #data_specification_details_text_area {
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
 }
 #data_specification_table {
     width: auto;
     height: auto;
 }
 #data_tree_container {
-    width: auto;
-    height: auto;
+    width: 1fr;
+    height: 100%;
+    border: solid green;
 }
 #digital_product_catalog_table {
     width: auto;
     height: auto;
 }
 #digital_product_details_text_area {
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
 }
 #glossary_table {
     width: auto;
     height: auto;
 }
 #glossary_term_details_text_area {
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
 }
 #number_of_processes_label {
     width: auto;

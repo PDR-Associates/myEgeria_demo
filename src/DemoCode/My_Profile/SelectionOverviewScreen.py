@@ -1,3 +1,11 @@
+"""
+   PDX-License-Identifier: Apache-2.0
+   Copyright Contributors to the ODPi Egeria project.
+
+   This file provides a set of report specification related functions for my_egeria.
+
+"""
+
 from typing import Any
 
 from pyegeria import exec_report_spec, PyegeriaException, print_basic_exception
@@ -25,35 +33,36 @@ class SelectionOverviewScreen(Screen):
         self.user_name = user
         self.user_password = pwd
         self.data_tree = data_tree
+        self.glossary_term_var_list: list = []
 
         if self.data_tree is None:
             if self.category == "glossary":
                 try:
-                    self.data_tree: Tree = app.query_one("#glossary_details_tree", Tree)
+                    self.data_tree: Tree = self.app.query_one("#glossary_details_tree", Tree)
                 except NoMatches:
                     self.dismiss(411)
                     return
             elif self.category == "catalog":
                 try:
-                    self.data_tree: Tree = app.query_one("#digital_product_catalog_tree", Tree)
+                    self.data_tree: Tree = self.app.query_one("#digital_product_catalog_tree", Tree)
                 except NoMatches:
                     self.dismiss(412)
                     return
             elif self.category == "dictionary":
                 try:
-                    self.data_tree: Tree = app.query_one("#data_dictionary_tree", Tree)
+                    self.data_tree: Tree = self.app.query_one("#data_dictionary_tree", Tree)
                 except NoMatches:
                     self.dismiss(413)
                     return
             elif self.category == "domain":
                 try:
-                    self.data_tree: Tree = app.query_one("#business_domain_tree", Tree)
+                    self.data_tree: Tree = self.app.query_one("#business_domain_tree", Tree)
                 except NoMatches:
                     self.dismiss(414)
                     return
             elif self.category == "specification":
                 try:
-                    self.data_tree: Tree = app.query_one("#data_specification_tree", Tree)
+                    self.data_tree: Tree = self.app.query_one("#data_specification_tree", Tree)
                 except NoMatches:
                     self.dismiss(415)
                     return
@@ -67,7 +76,7 @@ class SelectionOverviewScreen(Screen):
         self.title = f"Shopping for Data, Data Selection:"
         self.sub_title = f"Category: {self.category}"
         yield Header(show_clock=True)
-        yield Static("Please select an item from the tree [blink]:[/]")
+        yield Static("Please select an item from the tree [blink]:[/]", id="instruction_static")
         yield ScrollableContainer(
                                     self.data_tree,
                                     id="data_tree_container"
@@ -86,25 +95,26 @@ class SelectionOverviewScreen(Screen):
         """ The back option in the footer has been selected. Dismiss the screen."""
         self.dismiss(200)
 
-    @on(Tree.NodeSelected, "#data_tree")
+    @on(Tree.NodeSelected)
     def handle_tree_node_selected(self, event: Tree.NodeSelected):
         # Modify to handle for each tree?
         self.node_selected = event.node
         self.log(f"Node selected: {self.node_selected}")
         self.node_label = self.node_selected.label
+        self.node_data = self.node_selected.data
         # the provided id can be either a GUID or a qualified name!
         # the variable is labeled guid but it could contain a qualified name, both guid and qualified name are strings.
         self.node_GUID = self.node_selected.data
         self.log(f"Node label: {self.node_label}, GUID: {self.node_GUID}")
-        if self.node_label == "glossary":
+        if self.category == "glossary":
             self.display_selected_term_details(self.node_GUID)
-        elif self.node_label == "digital_product_catalog":
+        elif self.category == "catalog":
             self.display_selected_digital_product(self.node_GUID)
-        elif self.node_label == "data_dictionary":
+        elif self.category == "dictionary":
             self.display_selected_data_dictionary(self.node_GUID)
-        elif self.node_label == "business_domain":
+        elif self.category == "domain":
             self.display_selected_business_domain(self.node_GUID)
-        elif self.node_label == "data_specification":
+        elif self.category == "specification":
             self.display_selected_data_specification(self.node_GUID)
 
     def display_selected_term_details(self, term_GUID) -> Any:
@@ -121,17 +131,32 @@ class SelectionOverviewScreen(Screen):
                                                   user=self.user_name,
                                                   user_pass=self.user_password)
         except PyegeriaException as e:
-            print_basic_exception(e)
+            # print_basic_exception(e)
             self.log(f"Error retrieving glossary details: {e!s}")
-            self.dismiss(421)
-            return (421)
-        if not self.glossary_term_data or self.glossary_term_data == []:
+            # self.dismiss(421)
+            # return (421)
+            self.glossary_term_data = []
+
+        container = self.query_one("#data_details_placeholder_container")
+        container.remove_children()
+
+        if not self.glossary_term_data or self.glossary_term_data == [] or self.glossary_term_data == None or self.glossary_term_data.get("kind") == "empty":
             self.log(f"No glossary term data returned for GUID: {self.term_GUID}")
-            Static(f"No glossary term data returned for GUID: {self.term_GUID}").mount(self.query_one("#glossary_term_details_container"))
+            container.mount(Static(f"No glossary term data returned for GUID: {self.term_GUID}"))
         else:
-            self.log(f"Glossary term data returned for GUID: {self.term_GUID}")
-            TextArea(f"Glossary term data returned for GUID: {self.term_GUID}", id="glossary_term_details_text_area", read_only=True).mount(self.query_one("#glossary_term_details_container"))
-            TextArea.data = self.glossary_term_data
+            self.log(f"Glossary term data returned for term: {self.term_GUID}, content: {self.glossary_term_data} \n")
+            text_area = TextArea(f"Glossary term data returned for term: {self.term_GUID}", id="glossary_term_details_text_area", read_only=True)
+            container.mount(text_area)
+            glossary_term_vars = self.glossary_term_data.get("data", "No data available")
+            self.log(f"Glossary term data: {glossary_term_vars}")
+            if isinstance(glossary_term_vars, list):
+                glossary_term_vars = glossary_term_vars[0]
+            self.glossary_term_var_list: list = []
+            for glossary_term_var_key, glossary_term_var_content in glossary_term_vars.items():
+                self.log(f"Glossary term variable: {glossary_term_var_key}, content: {glossary_term_var_content}")
+                self.glossary_term_var_list.append(str(glossary_term_var_key)+ " " +str(glossary_term_var_content) + "\n")
+            
+            text_area.text = "".join(self.glossary_term_var_list)
 
     def display_selected_digital_product(self, digital_product_GUID) -> Any:
         """ The user has selected a glossary term, build a display of the term details,
@@ -148,19 +173,24 @@ class SelectionOverviewScreen(Screen):
                                                        user=self.user_name,
                                                        user_pass=self.user_password)
         except PyegeriaException as e:
-            print_basic_exception(e)
+            # print_basic_exception(e)
             self.log(f"Error retrieving digital product details: {e!s}")
-            self.dismiss(421)
-            return (421)
+            # self.dismiss(421)
+            # return (421)
+            self.digital_product_data = []
+
+        container = self.query_one("#data_details_placeholder_container")
+        container.remove_children()
+
         if not self.digital_product_data or self.digital_product_data == []:
             self.log(f"No digital product data returned for GUID: {self.digital_product_GUID}")
-            Static(f"No digital product data returned for GUID: {self.digital_product_GUID}").mount(
-                self.query_one("#digital_product_details_container"))
+            container.mount(Static(f"No digital product data returned for GUID: {self.digital_product_GUID}"))
         else:
             self.log(f"Digital product data returned for GUID: {self.digital_product_GUID}")
-            TextArea(f"Digital product data returned for GUID: {self.digital_product_GUID}", id="digital_product_details_text_area",
-                     read_only=True).mount(self.query_one("#digital_product_details_container"))
-            TextArea.data = self.digital_product_data
+            text_area = TextArea(f"Digital product data returned for GUID: {self.digital_product_GUID}", id="digital_product_details_text_area",
+                     read_only=True)
+            container.mount(text_area)
+            text_area.text = str(self.digital_product_data)
 
     def display_selected_data_dictionary(self, data_dictionary_GUID) -> Any:
         """ The user has selected a data dictionary, build a display of the dictionary details,
@@ -177,20 +207,25 @@ class SelectionOverviewScreen(Screen):
                                                          user=self.user_name,
                                                          user_pass=self.user_password)
         except PyegeriaException as e:
-            print_basic_exception(e)
+            # print_basic_exception(e)
             self.log(f"Error retrieving data dictionary details: {e!s}")
-            self.dismiss(421)
-            return (421)
+            # self.dismiss(421)
+            # return (421)
+            self.data_dictionary_data = []
+
+        container = self.query_one("#data_details_placeholder_container")
+        container.remove_children()
+
         if not self.data_dictionary_data or self.data_dictionary_data == []:
             self.log(f"No data dictionary data returned for GUID: {self.data_dictionary_GUID}")
-            Static(f"No data dictionary data returned for GUID: {self.data_dictionary_GUID}").mount(
-                self.query_one("#data_dictionary_details_container"))
+            container.mount(Static(f"No data dictionary data returned for GUID: {self.data_dictionary_GUID}"))
         else:
             self.log(f"Data dictionary data returned for GUID: {self.data_dictionary_GUID}")
-            TextArea(f"Data dictionary data returned for GUID: {self.data_dictionary_GUID}",
+            text_area = TextArea(f"Data dictionary data returned for GUID: {self.data_dictionary_GUID}",
                      id="data_dictionary_details_text_area",
-                     read_only=True).mount(self.query_one("#data_dictionary_details_container"))
-            TextArea.data = self.data_dictionary_data
+                     read_only=True)
+            container.mount(text_area)
+            text_area.text = str(self.data_dictionary_data)
 
     def display_selected_business_domain(self, business_domain_GUID) -> int:
         """ The user has selected a business domain, build a display of the domain details,
@@ -207,20 +242,25 @@ class SelectionOverviewScreen(Screen):
                                                          user=self.user_name,
                                                          user_pass=self.user_password)
         except PyegeriaException as e:
-            print_basic_exception(e)
+            # print_basic_exception(e)
             self.log(f"Error retrieving business domain details: {e!s}")
-            self.dismiss(421)
-            return (421)
+            # self.dismiss(421)
+            # return (421)
+            self.business_domain_data = []
+
+        container = self.query_one("#data_details_placeholder_container")
+        container.remove_children()
+
         if not self.business_domain_data or self.business_domain_data == []:
             self.log(f"No business domain data returned for GUID: {self.business_domain_GUID}")
-            Static(f"No business domain data returned for GUID: {self.business_domain_GUID}").mount(
-                self.query_one("#business_domain_details_container"))
+            container.mount(Static(f"No business domain data returned for GUID: {self.business_domain_GUID}"))
         else:
             self.log(f"Business domain data returned for GUID: {self.business_domain_GUID}")
-            TextArea(f"Business domain data returned for GUID: {self.business_domain_GUID}",
+            text_area = TextArea(f"Business domain data returned for GUID: {self.business_domain_GUID}",
                      id="business_domain_details_text_area",
-                     read_only=True).mount(self.query_one("#business_domain_details_container"))
-            TextArea.data = self.business_domain_data
+                     read_only=True)
+            container.mount(text_area)
+            text_area.text = str(self.business_domain_data)
 
     def display_selected_data_specification(self, data_specification_GUID) -> int:
         """ The user has selected a data specification, build a display of the specification details
@@ -238,17 +278,22 @@ class SelectionOverviewScreen(Screen):
                                                             user=self.user_name,
                                                             user_pass=self.user_password)
         except PyegeriaException as e:
-            print_basic_exception(e)
+            # print_basic_exception(e)
             self.log(f"Error retrieving data specification details: {e!s}")
-            self.dismiss(431)
-            return (431)
-        if not self_data_specification_data or self_data_specification_data == []:
+            # self.dismiss(431)
+            # return (431)
+            self.data_specification_data = []
+
+        container = self.query_one("#data_details_placeholder_container")
+        container.remove_children()
+
+        if not self.data_specification_data or self.data_specification_data == []:
             self.log(f"No data specification data returned for qualified name: {self.data_specification_qualified_name}")
-            Static(f"No data specification data returned for qualified name: {self.data_specification_qualified_name}").mount(
-                self.query_one("#data_specification_details_container"))
+            container.mount(Static(f"No data specification data returned for qualified name: {self.data_specification_qualified_name}"))
         else:
             self.log(f"Data specification data returned for qualified name: {self.data_specification_qualified_name}")
-            TextArea(f"Data specification data returned for qualified name: {self.data_specification_qualified_name}",
+            text_area = TextArea(f"Data specification data returned for qualified name: {self.data_specification_qualified_name}",
                      id="data_specification_details_text_area",
-                     read_only=True).mount(self.query_one("#data_specification_details_container"))
-            TextArea.data = self_data_specification_data
+                     read_only=True)
+            container.mount(text_area)
+            text_area.text = str(self_data_specification_data)

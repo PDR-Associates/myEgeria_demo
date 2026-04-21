@@ -1,3 +1,11 @@
+"""
+   PDX-License-Identifier: Apache-2.0
+   Copyright Contributors to the ODPi Egeria project.
+
+   This file provides a set of report specification related functions for my_egeria.
+
+"""
+
 from typing import Any
 
 from pyegeria import load_app_config
@@ -110,8 +118,8 @@ class TechnologyTypeTemplatesScreen(ModalScreen[Any]):
         self.log(f"Submit button pressed, button: {event.button}")
         save_input_data: dict = {}
         for input_widget in self.query("Input"):
-            self.log(f"Input widget: {input_widget.id}, value: {input_widget}")
-            save_input_data.update({input_widget.id: input_widget})
+            self.log(f"Input widget: {input_widget.id}, value: {input_widget.value}")
+            save_input_data.update({input_widget.id: input_widget.value})
         self.log(f"Save input data: {save_input_data}")
         self.dismiss(["input", save_input_data, self.full_template])
 

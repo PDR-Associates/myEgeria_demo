@@ -1,14 +1,21 @@
+"""
+   PDX-License-Identifier: Apache-2.0
+   Copyright Contributors to the ODPi Egeria project.
+
+   This file provides a set of report specification related functions for my_egeria.
+
+"""
+
 import datetime
 import re
 
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 from pyegeria import load_app_config, settings, MyProfile, PyegeriaException, print_basic_exception, exec_report_spec, \
-    AutomatedCuration, MetadataExpert
-from textual import on, work
+    AutomatedCuration, MetadataExpert, ActorManager
+from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import ScrollableContainer
 from textual.widgets import DataTable, OptionList, Header, Static, Footer, Tree
-from textual.widgets._option_list import Option
 
 from CreateProfileScreen import CreateProfileScreen
 from TechnologyTypesScreen import TechnologyTypesScreen
@@ -19,6 +26,7 @@ from StatusScreen import StatusScreen
 from ShopForDataScreen import ShopForDataScreen
 from SelectionOverviewScreen import SelectionOverviewScreen
 from MyTeam import MyTeam
+from MainScreen import MainScreen
 
 
 class MyProfileApp(App):
@@ -32,6 +40,8 @@ class MyProfileApp(App):
     CSS_PATH = "my_profile.tcss"
 
     SCREENS = {
+        "main": MainScreen,
+        "_default": MainScreen,
         "create_profile": CreateProfileScreen,
         "tech_types": TechnologyTypesScreen,
         "tech_type_options": TechnologyTypeOptionsScreen,
@@ -85,60 +95,10 @@ class MyProfileApp(App):
         self.business_glossary_data_extract = None
         self.display_glossary_data_extract = None
         self.digital_glossary_data_extract = None
+        self.team_members: list[list] = []
 
     def compose(self) -> ComposeResult:
-
-        # Create tables up-front; populate them in on_mount()
-        self.projects_table = DataTable(id="projects_table")
-        self.communities_table = DataTable(id="communities_table")
-        self.roles_table = DataTable(id="roles_table")
-        self.actions_table = DataTable(id="actions_table")
-        self.teams_table = DataTable(id="teams_table")
-        self.user_identity_table = DataTable(id="user_identity_table")
-        self.other_function_list = OptionList(id="other_function_list")
-
-        # place widgets into grid on screen, note sequence determines position!
-        yield Header(show_clock=True)
-
-        yield ScrollableContainer(
-            Static("Projects"),
-            self.projects_table
-        )
-
-        yield ScrollableContainer(
-            Static("Communities"),
-            self.communities_table
-        )
-
-        yield ScrollableContainer(
-            Static(f"Other Functions"),
-            Static(f"[b]Select a function[/b]"),
-            OptionList(
-                Option("User Identities", disabled=True),
-                Option("Catalogs/Shop for Data"),
-                Option("Edit Profile", disabled=True),
-                Option("Subscriptions", disabled=True),
-                Option("Technology Types"),
-                Option("User Bookmarks", disabled=True),
-                id="other_function_list"
-            ),
-            id="other_function_container"
-        )
-
-        yield ScrollableContainer(
-            Static("Roles"),
-            self.roles_table
-        )
-
-        yield ScrollableContainer(
-            Static("Teams"),
-            self.teams_table
-        )
-
-        yield ScrollableContainer(
-            Static("Actions"),
-            self.actions_table
-        )
+        yield Header()
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -193,6 +153,7 @@ class MyProfileApp(App):
                 report_spec="My-User-MD",
             )
             self.log(f"Profile retrieved successfully: {self.user_profile_struct}")
+            self.push_screen("main")
         except PyegeriaException as e2:
             self.log(f"Error retrieving user profile: {e2!s}")
             self.exit(412)
@@ -246,6 +207,14 @@ class MyProfileApp(App):
 
     async def _populate_tables(self) -> None:
         """Populates tables from normalized profile data"""
+        main_screen = self.get_screen("main")
+        self.projects_table = main_screen.query_one("#projects_table", DataTable)
+        self.communities_table = main_screen.query_one("#communities_table", DataTable)
+        self.roles_table = main_screen.query_one("#roles_table", DataTable)
+        self.actions_table = main_screen.query_one("#actions_table", DataTable)
+        self.user_identity_table = main_screen.query_one("#user_identity_table", DataTable)
+        self.teams_table = main_screen.query_one("#teams_table", DataTable)
+
         assert self.projects_table is not None
         assert self.communities_table is not None
         assert self.roles_table is not None
@@ -593,7 +562,7 @@ class MyProfileApp(App):
 
         # display the screen so the objects we need to mount to are created in the DOM
         # then we can build the display elements for the placeholder properties
-        # and mount them in the appropriatwe containers on the screen
+        # and mount them in the appropriate containers on the screen
         if self.selected_t_option == "template":
             await self.push_screen(TechnologyTypeTemplatesScreen(self.user_name,
                                                              self.karma_points,
@@ -1007,26 +976,57 @@ class MyProfileApp(App):
         self.glossary_display_name = target_display_name
         
         for glossary_instance in self.glossary_data_extract:
-            self.glossary_folders = glossary_instance.get("Folders") or None
-            self.log(f"glossary_folders: {self.glossary_folders}")
-            category = "Uncategorised"
-            if self.glossary_folders != None:
-                glossary_tree: Tree = Tree(label=self.glossary_display_name, id="glossary_details_tree")
-                glossary_tree.root.expand()
-                glossary_tree.auto_expand = True
-                for folder in self.glossary_folders:
-                    if "GlossaryCategory" in folder:
-                        category = glossary_tree.root.add(folder)
-                        category.expand()
-                    if "GlossaryTerm" in folder:
-                        term = category.add_leaf(folder)
-                glossary_tree.refresh()
-            else:
-                self.log(f"No glossary folders found in the glossary data extract")
-                folder_category = "Empty Glossary"
-                category = glossary_tree.root.add(folder_category)
-                folder_term = "No glossary terms found for this glossary"
-                category.add_leaf(folder_term)
+            if glossary_instance.get("Qualified Name") == target_qualified_name:
+                self.glossary_folders = glossary_instance.get("Folders") or None
+                self.log(f"glossary_folders: {self.glossary_folders}")
+                category = "Uncategorised"
+                if self.glossary_folders != None:
+                    glossary_tree: Tree = Tree(label=self.glossary_display_name, id="glossary_details_tree")
+                    glossary_tree.root.expand()
+                    glossary_tree.auto_expand = True
+                    
+                    folder_entries = [f.strip() for f in self.glossary_folders.split(',')]
+                    nodes = {(): glossary_tree.root}
+                    prefixes = ["GlossaryCategory", "GlossaryTerm", "CollectionFolder"]
+
+                    for entry in folder_entries:
+                        parts = entry.split('::')
+                        if len(parts) == 1:
+                            parts = entry.split('/')
+                        
+                        is_leaf = False
+                        path_parts = []
+                        full_id = ""
+                        if any(parts[0].startswith(p) for p in prefixes):
+                            type_prefix = parts[0]
+                            path_parts = parts[1:]
+                            is_leaf = "Term" in type_prefix
+                            if is_leaf:
+                                full_id = path_parts[-1] 
+                        else:
+                            path_parts = parts
+                            
+                        current_path = ()
+                        for i, part in enumerate(path_parts):
+                            parent_path = current_path
+                            current_path = current_path + (part,)
+                            
+                            if current_path not in nodes:
+                                parent_node = nodes[parent_path]
+                                if is_leaf and i == len(path_parts) - 1:
+                                    nodes[current_path] = parent_node.add_leaf(part, data=full_id)
+                                else:
+                                    new_node = parent_node.add(part, data=part)
+                                    new_node.expand()
+                                    nodes[current_path] = new_node
+                                    
+                    glossary_tree.refresh()
+                else:
+                    self.log(f"No glossary folders found in the glossary data extract")
+                    folder_category = "Empty Glossary"
+                    category = glossary_tree.root.add(folder_category)
+                    folder_term = "No glossary terms found for this glossary"
+                    category.add_leaf(folder_term)
 
         self.push_screen(SelectionOverviewScreen("glossary",
                                                  self.view_server,
@@ -1147,6 +1147,8 @@ class MyProfileApp(App):
         # Find all matches in the text
         matches = re.findall(pattern, text)
 
+        self.log(f"Extracted {len(matches)} GlossaryTerm items from text")
+
         # Clean up whitespace and return as a list
         return [match.strip() for match in matches]
 
@@ -1188,7 +1190,7 @@ class MyProfileApp(App):
             self.log(f"Error retrieving glossary term details: {error_category}, {error_message}")
             self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
         else:
-            self.term_details_container: ScrollableContainer = self.query_one(DataTable)
+            self.term_details_container: ScrollableContainer = self.screen.query_one(DataTable)
             self.term_details_container.mount()
             for data_item_key, data_item_value in self.term_details_data.items():
                 Static(f"Field: {data_item_key}, Value: {data_item_value}").mount(self.term_details_container)
@@ -1198,61 +1200,116 @@ class MyProfileApp(App):
 
     @on(DataTable.RowSelected, "#roles_table")
     def handle_roles_table_row_selection(self, event):
-        role_table = self.query_one("#roles_table", DataTable)
+        role_table = event.data_table
         selected_row_key = event.row_key
         selected_row_data = role_table.get_row(selected_row_key)
         selected_role_guid = selected_row_data[2]
         selected_role_name = selected_row_data[0]
         selected_role_type = selected_row_data[1]
         self.log(f"Selected role: {selected_row_data}")
-        team_members: list[list] = []
+        team_members_list: list = []
+        self.team_members = []
+
+        # provide list of team members for team leader
         if "TeamLeader" in selected_role_name or "TeamLeader" in selected_role_type:
             self.log(f"Selected role is a TeamLeader: {selected_role_name}")
-            # role_search_key = selected_role_name.replace("TeamLeader", "TeamMembers")
-            role_search_key = selected_role_guid
-            team_member_data = exec_report_spec(format_set_name="Actor-Profiles",
+            team_members_list, team_display_name, team_qualified_name, team_category, team_description = self.find_team_members(selected_role_name)
+        elif "TeamMembers" in selected_role_name or "TeamMembers" in selected_role_type:
+            self.log(f"Selected role is a TeamMember: {selected_role_name}")
+            team_members_list, team_display_name, team_qualified_name, team_category, team_description = self.find_team_members(selected_role_name)
+        else:
+            self.log(f"Selected role is not a TeamLeader or TeamMember: {selected_role_name}")
+            return (201)
+
+        self.log(f"team_members_list: {team_members_list}")
+        # Process team data for display on screen
+        team_member_properties: list = []
+        team_properties: list = []
+        team_properties.append(team_display_name)
+        team_properties.append(team_qualified_name)
+        team_properties.append(team_category)
+        team_properties.append(team_description)
+        self.log(f"team_properties: {team_properties}")
+        # Process team member data for display on screen
+        for team_member in team_members_list:
+            if isinstance(team_member, list) and "Selection Error" in team_member[0]:
+                self.log(f"Team member details contain 'Selection Error': {team_member}")
+                self.team_members.append(team_member)
+                break
+            else:
+                self.log(f"Processing team member properties: {team_member}")
+                team_member_properties = []
+                team_member_properties.append(team_member.get("Individual"))
+                team_member_properties.append(team_member.get("Assignment Type"))
+                team_member_properties.append(team_member.get("Individual GUID"))
+                self.log(f"team_member_properties: {team_member_properties}")
+                self.team_members.append(team_member_properties)
+                self.log(f"team_members: {self.team_members}")
+                continue
+        self.log(f"team_members: {self.team_members}")
+        self.log(f"team_properties: {team_properties}")
+        self.log(f"User name: {self.user_name}")
+        self.push_screen(MyTeam(self.team_members, team_properties, self.user_name), callback=self.my_team_callback)
+
+    def find_team_members(self, role_name):
+        # common routine for finding team members given a role name
+        # extract the Department::nnn from the name to use as the search key
+        selected_role_name = role_name
+        team_members_list: list = []
+        self.team_members = []
+
+        search_key_parts = selected_role_name.split("::")
+        role_search_key = '::'.join(search_key_parts[1:])
+        self.log(f"Role search key: {role_search_key}")
+        # get the team member details for that department
+        team_member_data: dict = exec_report_spec(format_set_name="Team-Members",
                                                   output_format="DICT",
-                                                  params={"search_string": role_search_key, "filter_string": role_search_key},
+                                                  params={"search_string": role_search_key},
                                                   view_server=self.view_server,
                                                   view_url=self.platform_url,
                                                   user=self.user_name,
                                                   user_pass=self.user_password)
-            self.log(f"team_member_data: {team_member_data}")
-            if isinstance(team_member_data, dict) and "data" in team_member_data:
-                team_member_data = team_member_data.get("data")
-            elif isinstance(team_member_data, dict) and "data" not in team_member_data:
-                error_category = "Team Member Details"
-                error_message = "No team member details found"
-                self.log(f"Error retrieving team member details: {error_category}, {error_message}")
-                self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-                return (430)
-            elif not team_member_data or team_member_data == None:
-                error_category = "Team Member Details"
-                error_message = "No team member details found"
-                self.log(f"Error retrieving team member details: {error_category}, {error_message}")
-                self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-                return (430)
+        self.log(f"team_member_data: {team_member_data}")
+        # team members?
+        if team_member_data.get("kind") != "empty":
+            team_members_data_struct: list[dict] = team_member_data.get("data")
+            self.log(f"team members data extracted: {team_members_data_struct}")
+        else:
+            self.log(f"No team members found for role: {role_search_key}")
+            error_category = "Team Members"
+            error_message = "No team members found"
+            self.log(f"Error retrieving team members: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+            return
+        team_members_list.clear()
+        for team_member in team_members_data_struct:
+            # get team details
+            team_display_name: str = team_member.get("Display Name", None)
+            team_qualified_name: str = team_member.get("Qualified Name", None)
+            team_category: str = team_member.get("Category", None)
+            team_description: str = team_member.get("Description", None)
+            # extract the team member entries
+            team_member_structure: list[dict] = team_member.get("Members", None)
+
+            if team_member_structure != None:
+                for entry in team_member_structure:
+                    team_members_list.append(entry)
+
+                    # if this is for a team leader then:
+                    # get team members profile for contact information and contribution record (karma points)
+
+                    # if "TeamLeader" in selected_role_name:
+                    #     member_guid = entry.get("Individual GUID", None)
+                    #
+
+                    continue
+                return(team_members_list, team_display_name, team_qualified_name, team_category, team_description)
             else:
                 error_category = "Team Member Details"
-                error_message = "Unexpected data format for team member details"
+                error_message = "No team member details found"
                 self.log(f"Error retrieving team member details: {error_category}, {error_message}")
                 self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
                 return (430)
-        else:
-            self.log(f"Selected role is not a TeamLeader: {selected_role_name}")
-            team_members[0] = ([f"Selection Error", "Not a teamLeader role, so no TeamMembers to search for", {selected_role_name}])
-
-        # Process team member data for display on screen
-        team_member_properties: list = []
-        for team_member in team_member_data:
-            if isinstance(team_member, list) and "Selection Error" in team_member[0]:
-                team_member_properties.append(team_member)
-                break
-            team_member_properties.append(team_member.get("Display Name"))
-            team_member_properties.append(team_member.get("Role"))
-            team_member_properties.append(team_member.get("Karma Points"))
-        self.log(f"team_member_properties: {team_member_properties}")
-        self.push_screen(MyTeam(team_members, self.user_name), callback=self.my_team_callback)
 
     def my_team_callback(self, status) -> None:
         self.log(f"Callback received with status: {status}")
@@ -1260,7 +1317,7 @@ class MyProfileApp(App):
             self.log("MyTeam screen completed successfully")
         else:
             self.log(f"Error in MyTeam screen: {status}")
-        self.pop_screen()
+        self.push_screen("main")
 
 
 if __name__ == "__main__":
