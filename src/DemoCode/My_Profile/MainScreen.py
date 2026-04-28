@@ -18,6 +18,11 @@ class MainScreen(Screen):
 
     CSS_PATH = "my_profile.tcss"
 
+    def __init__(self):
+        super().__init__()
+        self.title = "Egeria"
+        self.sub_title = "My Profile"
+
     def compose(self) -> ComposeResult:
         # place widgets into grid on screen, note sequence determines position!
         yield Header(show_clock=True)

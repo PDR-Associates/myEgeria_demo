@@ -9,6 +9,7 @@
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
+from textual.events import Action
 from textual.screen import Screen
 from textual.widgets import DataTable, Header, TextArea, Static, Footer
 
@@ -16,17 +17,23 @@ from textual.widgets import DataTable, Header, TextArea, Static, Footer
 class ShopForDataScreen(Screen):
     """ Screen to Present a choice of different data sources to the user."""
     BINDINGS = [("q", "dismiss(200)", "Quit"),
+                ("s", "search_for_term", "Search for term"),
                 ("b", "back", "Go back")]
 
     CSS_PATH = "my_profile.tcss"
 
-    def __init__ (self, glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, data_specification_table ):
+    def __init__ (self, glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, data_specification_table,
+                  user_name, user_password, view_server, platform_url):
         """Initialize the ShopForDataScreen screen."""
         self.glossary_table: DataTable = glossary_table
         self.digital_product_catalog_table: DataTable = digital_product_catalog_table
         self.data_dictionary_table: DataTable = data_dictionary_table
         self.business_domain_table: DataTable = business_domain_table
         self.data_specification_table: DataTable = data_specification_table
+        self.user_name = user_name
+        self.user_password = user_password
+        self.view_server = view_server
+        self.platform_url = platform_url
         super().__init__()
 
     def compose(self) -> ComposeResult:
@@ -49,6 +56,11 @@ class ShopForDataScreen(Screen):
             Static("Data Specification"),
             self.data_specification_table)
         yield Footer()
+
+
+    def on_mount(self) -> None:
+        self.header = f"Egeria Data Sources for user {self.user_name}"
+        self.sub_header = "Shop for Data"
 
     @on(DataTable.RowSelected, "#glossary_table")
     def handle_glossary_table_selection(self, event: DataTable.RowSelected):
@@ -106,6 +118,11 @@ class ShopForDataScreen(Screen):
     def action_back(self) -> None:
         """ The back option in the footer has been selected. Dismiss the screen."""
         self.dismiss(200)
+
+
+    def action_search_for_term(self) -> None:
+        """ The search for term option in the footer has been selected. Dismiss the screen."""
+        self.dismiss(201)
 
     def action_quit(self) -> None:
         """ The quit option in the footer has been selected. Dismiss the screen."""

@@ -25,7 +25,7 @@ class CreateProfileScreen(ModalScreen[int]):
     BINDINGS = [("q", "dismiss(200)", "Quit")]
     CSS_PATH = "my_profile.tcss"
 
-    def __init__(self):
+    def __init__(self, user, password, view_server, platform_url):
         super().__init__()
         load_app_config()
         app_config = settings.Environment
@@ -33,12 +33,12 @@ class CreateProfileScreen(ModalScreen[int]):
         # config_logging()
         self.karma_points = 0
 
-        self.user_name = app_user.user_name or "garygeeke"
-        self.user_password = app_user.user_pwd or "secret"
-        self.view_server = app_config.egeria_view_server
-        self.platform_url = app_config.egeria_platform_url
-        print("Platform:", app_config.egeria_platform_url)
-        print("View Server:", app_config.egeria_view_server)
+        self.user_name = user
+        self.user_password = password
+        self.view_server = view_server
+        self.platform_url = platform_url
+        print("Platform:", self.platform_url)
+        print("View Server:", self.view_server)
 
     def on_mount(self) -> None:
         self.title = f"User: {self.user_name}, Karma Points: {self.karma_points}"

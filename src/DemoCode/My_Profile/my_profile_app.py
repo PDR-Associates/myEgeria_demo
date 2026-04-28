@@ -27,7 +27,7 @@ from ShopForDataScreen import ShopForDataScreen
 from SelectionOverviewScreen import SelectionOverviewScreen
 from MyTeam import MyTeam
 from MainScreen import MainScreen
-
+from SearchForTermScreen import SearchForTermScreen
 
 class MyProfileApp(App):
     """My Profile App.
@@ -49,6 +49,7 @@ class MyProfileApp(App):
         "tech_type_processes": TechnologyTypeProcessesScreen,
         "status": StatusScreen,
         "shop_4_data": ShopForDataScreen,
+        "search_for_term": SearchForTermScreen,
         "overview": SelectionOverviewScreen,
         "my_team": MyTeam
     }
@@ -131,7 +132,12 @@ class MyProfileApp(App):
         if self.my_profile_data == []:
             self.log(f"Error retrieving profile. Prompting to create one...")
             self.log(f"To create a profile you must have a valid userid in the system, please contact your system administrator to create one if needed")
-            await self.push_screen(CreateProfileScreen(), callback = self.new_profile_return)
+            await self.push_screen(CreateProfileScreen(
+                self.user_name,
+                self.user_password,
+                self.view_server,
+                self.platform_url,
+            ), callback = self.new_profile_return)
         else:
             self.new_profile_return(200)
 
@@ -752,18 +758,34 @@ class MyProfileApp(App):
         # take the input data and use it to run the command/process
         pass
 
-    def shop_for_data_callback(self, result):
+    async def shop_for_data_callback(self, result):
         """ Callback for Shop For Data screen"""
-        selection_type = result[0]
-        selection_parm_1 = result[1]
-        selection_parm_2 = result[2]
+        if isinstance(result, int):
+            selection_type = int(result)
+            selection_parm_1 = None
+            selection_parm_2 = None
+            self.log(f"Shop For Data screen returned: {selection_type}, type: {type(selection_type)}.")
+        else:
+            self.log(f"Shop For Data screen returned: {result}, type: {type(result)}.")
+            selection_type = result[0]
+            selection_parm_1 = result[1]
+            selection_parm_2 = result[2]
+            self.log(f"Shop For Data screen returned: {selection_type}, with parameters: {selection_parm_1}, {selection_parm_2}")
 
         if isinstance(selection_type, int):
             if selection_type == 200:
+                self.log(f"Shop For Data screen returned successfully.")
+                return(200)
+            elif selection_type == 201:
+                self.log(f"Shop For Data screen returned: {selection_type}, request to search for a term ")
+                await self.push_screen(SearchForTermScreen(self.user_name,
+                                                           self.user_password,
+                                                           self.view_server,
+                                                           self.platform_url), callback=self.search_for_term_callback)
                 return(200)
             else:
-                self.log(f"Shop For Data screen returned: {selection_type}, exiting.")
-                self.exit(selection_type)
+                self.log(f"Shop For Data screen returned: {selection_type}.")
+                return(selection_type)
 
         if selection_type == "dictionary":
             self.log(f"Selected dictionary with qualified name: {selection_parm_1}")
@@ -1318,6 +1340,36 @@ class MyProfileApp(App):
         else:
             self.log(f"Error in MyTeam screen: {status}")
         self.push_screen("main")
+
+    def search_for_term_callback(self, status) -> None:
+        self.log(f"Callback received with status: {status}")
+        if status == 200:
+            self.log("Search for term screen completed successfully")
+            self.push_screen("main")
+        elif status == 201:
+            glossary_table = self.query_one("g#glossary_table", DataTable)
+            digital_product_catalog_table = self.query_one("d#digital_product_catalog_table", DataTable)
+            data_dictionary_table = self.query_one("d#data_dictionary_table", DataTable)
+            business_domain_table = self.query_one("b#business_domain_table", DataTable)
+            data_specification_table = self.query_one("d#data_specification_table", DataTable)
+            self.log("No matches found for search term")
+            self.push_screen(ShopForDataScreen(glossary_table,
+                                               digital_product_catalog_table,
+                                               data_dictionary_table,
+                                               business_domain_table,
+                                               data_specification_table,
+                                               self.user_name,
+                                               self.user_password,
+                                               self.view_server,
+                                               self.platform_url),
+                                               callback=self.shop_for_data_callback)
+
+        else:
+            self.log(f"Error in Search for term screen: {status}")
+            error_category = "Search for Term"
+            error_message = "Error retrieving Term details"
+            self.log(f"Error retrieving team member details: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
 
 
 if __name__ == "__main__":

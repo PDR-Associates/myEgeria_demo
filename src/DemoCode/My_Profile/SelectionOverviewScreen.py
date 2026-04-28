@@ -13,13 +13,13 @@ from textual import app, on
 from textual.app import ComposeResult
 from textual.containers import ScrollableContainer
 from textual.css.query import NoMatches
-from textual.screen import Screen
-from textual.widgets import Tree, Header, Static, Placeholder, Footer, TextArea
+from textual.screen import Screen, ModalScreen
+from textual.widgets import Tree, Header, Static, Placeholder, Footer, TextArea, Markdown
 
 from StatusScreen import StatusScreen
 
 
-class SelectionOverviewScreen(Screen):
+class SelectionOverviewScreen(ModalScreen):
     """Screen to display the selection of the user's data sources."""
     BINDINGS = [("q", "quit", "Quit"),
                 ("b", "back", "Go back")]
@@ -124,7 +124,7 @@ class SelectionOverviewScreen(Screen):
         self.log(f"Selected glossary term GUID: {self.term_GUID}")
         try:
             self.glossary_term_data = exec_report_spec(format_set_name="Glossary-Terms",
-                                                  output_format="DICT",
+                                                  output_format="MD",
                                                   params={"search_string": self.term_GUID, "filter_string": self.term_GUID},
                                                   view_server=self.view_server,
                                                   view_url=self.platform_url,
@@ -136,27 +136,28 @@ class SelectionOverviewScreen(Screen):
             # self.dismiss(421)
             # return (421)
             self.glossary_term_data = []
-
+        if isinstance(self.glossary_term_data, dict):
+            if self.glossary_term_data.get("kind") == "text":
+                if self.glossary_term_data.get("mime") == "text/markdown":
+                    self.glossary_term_data = self.glossary_term_data.get("content")
+                else:
+                    self.glossary_term_data = "No Markdown content found for this glossary term"
+            else:
+                self.glossary_term_data = "No Markdown content found for this glossary term"
+        else:
+            self.glossary_term_data = "No Markdown content found for this glossary term"
         container = self.query_one("#data_details_placeholder_container")
         container.remove_children()
 
-        if not self.glossary_term_data or self.glossary_term_data == [] or self.glossary_term_data == None or self.glossary_term_data.get("kind") == "empty":
+        # if not self.glossary_term_data or self.glossary_term_data == [] or self.glossary_term_data == None or self.glossary_term_data.get("kind") == "empty":
+        if not self.glossary_term_data or self.glossary_term_data == [] or self.glossary_term_data == None:
             self.log(f"No glossary term data returned for GUID: {self.term_GUID}")
             container.mount(Static(f"No glossary term data returned for GUID: {self.term_GUID}"))
         else:
             self.log(f"Glossary term data returned for term: {self.term_GUID}, content: {self.glossary_term_data} \n")
-            text_area = TextArea(f"Glossary term data returned for term: {self.term_GUID}", id="glossary_term_details_text_area", read_only=True)
-            container.mount(text_area)
-            glossary_term_vars = self.glossary_term_data.get("data", "No data available")
-            self.log(f"Glossary term data: {glossary_term_vars}")
-            if isinstance(glossary_term_vars, list):
-                glossary_term_vars = glossary_term_vars[0]
-            self.glossary_term_var_list: list = []
-            for glossary_term_var_key, glossary_term_var_content in glossary_term_vars.items():
-                self.log(f"Glossary term variable: {glossary_term_var_key}, content: {glossary_term_var_content}")
-                self.glossary_term_var_list.append(str(glossary_term_var_key)+ " " +str(glossary_term_var_content) + "\n")
-            
-            text_area.text = "".join(self.glossary_term_var_list)
+            markdown = Markdown(self.glossary_term_data)
+            markdown.code_indent_guides = False
+            self.query_one("#data_details_placeholder_container").mount(markdown)
 
     def display_selected_digital_product(self, digital_product_GUID) -> Any:
         """ The user has selected a glossary term, build a display of the term details,
