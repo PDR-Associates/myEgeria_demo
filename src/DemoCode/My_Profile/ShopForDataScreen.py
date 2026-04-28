@@ -22,14 +22,14 @@ class ShopForDataScreen(Screen):
 
     CSS_PATH = "my_profile.tcss"
 
-    def __init__ (self, glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, data_specification_table,
+    def __init__ (self, glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, root_collection_table,
                   user_name, user_password, view_server, platform_url):
         """Initialize the ShopForDataScreen screen."""
         self.glossary_table: DataTable = glossary_table
         self.digital_product_catalog_table: DataTable = digital_product_catalog_table
         self.data_dictionary_table: DataTable = data_dictionary_table
         self.business_domain_table: DataTable = business_domain_table
-        self.data_specification_table: DataTable = data_specification_table
+        self.root_collection_table: DataTable = root_collection_table
         self.user_name = user_name
         self.user_password = user_password
         self.view_server = view_server
@@ -54,7 +54,7 @@ class ShopForDataScreen(Screen):
             self.business_domain_table)
         yield ScrollableContainer(
             Static("Data Specification"),
-            self.data_specification_table)
+            self.root_collection_table)
         yield Footer()
 
 
@@ -105,15 +105,25 @@ class ShopForDataScreen(Screen):
         self.log(f"Row selected: {row_selected}, values: {row_values}, qualified name: {row_qualified_name}, type name: {row_type_name}, guid: {row_guid}")
         self.dismiss (["domain", row_qualified_name, row_type_name])
 
-    @on(DataTable.RowSelected, "#data_specification_table")
-    def handle_data_specification_table_selection(self, event: DataTable.RowSelected):
+    # @on(DataTable.RowSelected, "#data_specification_table")
+    # def handle_data_specification_table_selection(self, event: DataTable.RowSelected):
+    #     row_selected = event.row_key
+    #     row_values = self.query_one("#data_specification_table", DataTable).get_row(event.row_key)
+    #     row_display_name = row_values[0]
+    #     row_description = row_values[1]
+    #     row_qualified_name = row_values[2]
+    #     self.log(f"Row selected: {row_selected}, values: {row_values}, display name: {row_display_name}, description: {row_description}, qualified name: {row_qualified_name}")
+    #     self.dismiss (["specification", row_qualified_name, row_display_name])
+
+    @on (DataTable.RowSelected, "#root_collection_table")
+    def handle_root_collection_table_selection(self, event: DataTable.RowSelected):
         row_selected = event.row_key
-        row_values = self.query_one("#data_specification_table", DataTable).get_row(event.row_key)
-        row_display_name = row_values[0]
+        row_values = self.query_one("#root_collection_table", DataTable).get_row(event.row_key)
+        row_qualified_name = row_values[0]
         row_description = row_values[1]
-        row_qualified_name = row_values[2]
-        self.log(f"Row selected: {row_selected}, values: {row_values}, display name: {row_display_name}, description: {row_description}, qualified name: {row_qualified_name}")
-        self.dismiss (["specification", row_qualified_name, row_display_name])
+        row_GUID = row_values[2]
+        self.log(f"Row selected: {row_selected}, values: {row_values}, qualified name: {row_qualified_name}, description: {row_description}, GUID: {row_GUID}")
+        self.dismiss (["collection", row_qualified_name, row_description])
 
     def action_back(self) -> None:
         """ The back option in the footer has been selected. Dismiss the screen."""

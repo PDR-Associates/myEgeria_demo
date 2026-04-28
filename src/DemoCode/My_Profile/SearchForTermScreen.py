@@ -68,26 +68,29 @@ class SearchForTermScreen(ModalScreen):
         self.log(f"Search term input changed: {self.search_term}")
 
     @on(Button.Pressed, "#search_term_btn")
-    def handle_search_term(self) -> None:
+    async def handle_search_term(self) -> None:
         self.log("User requested search term")
         if self.search_term:
             # search for the term
             search_result = self.search_for_the_term(self.search_term)
-            result_container = self.query_one("#search_term_result_container", ScrollableContainer).mount(
-                Static(f"Search term result for {self.search_term}", id = "search_term_result")
-            )
+            self.log(f"Search result: {search_result}")
+            my_placeholder = self.query_one("#search_term_result")
+            await my_placeholder.remove()
+            markdown = Markdown(search_result, id="search_term_result")
+            markdown.code_indent_guides = False
+            await self.query_one("#search_term_result_container", ScrollableContainer).mount(markdown)
         else:
             self.log("No search term provided")
             my_placeholder = self.query_one("#search_term_result")
-            my_placeholder.remove()
-            markdown = Markdown(self.search_term, id="search_term_result")
+            await my_placeholder.remove()
+            markdown = Markdown(f"# No Content Found for: {self.search_term}", id="search_term_result")
             markdown.code_indent_guides = False
-            result_container = self.query_one("#search_term_result_container", ScrollableContainer).mount(markdown)
+            await self.query_one("#search_term_result_container", ScrollableContainer).mount(markdown)
 
     def search_for_the_term(self, search_term):
         """ Invoke egeria function to search Egeria for the term """
         try:
-            self.search_result = exec_report_spec(format_set_name="Glossary_Terms",
+            self.search_result = exec_report_spec(format_set_name="Glossary-Terms",
                                              output_format="MD",
                                               params={"search_string": search_term, "filter_string": search_term},
                                               view_server=self.view_server,
@@ -99,14 +102,14 @@ class SearchForTermScreen(ModalScreen):
                     if self.search_result.get("mimeType") == "text/markdown":
                         self.search_result = self.search_result.get("content")
                     else:
-                        self.search_result = "No Markdown content found for this glossary term"
+                        self.search_result = "# No Markdown content found for this glossary term"
                 else:
-                    self.search_result = "No Markdown content found for this glossary term"
+                    self.search_result = "# No Markdown content found for this glossary term"
             else:
-                self.search_result = "No Markdown content found for this glossary term"
+                self.search_result = "# No Markdown content found for this glossary term"
 
             return self.search_result
         except PyegeriaException as e:
             self.log(f"Error searching for term: {e}")
-            self.search_result = f"Error searching for term: {e}"
+            self.search_result = f"# Error searching for term: {e}"
             return self.search_result

@@ -11,7 +11,7 @@ import re
 
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 from pyegeria import load_app_config, settings, MyProfile, PyegeriaException, print_basic_exception, exec_report_spec, \
-    AutomatedCuration, MetadataExpert, ActorManager
+    AutomatedCuration, MetadataExpert, ActorManager, EgeriaCat
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import ScrollableContainer
@@ -438,45 +438,91 @@ class MyProfileApp(App):
                                                        domain.get("GUID", ""))
                     continue
 
-            # Data Specifications
-            data_specification_table: DataTable = DataTable(id="data_specification_table")
-            data_specification_table.add_columns("Display Name", "Description", "Qualified Name")
-            data_specification_table.cursor_type = "row"
-            data_specification_table.zebra_stripes = True
+            # Data Specifications removed from the display, code is working but being replaced by Root Collections table
+            # data_specification_table: DataTable = DataTable(id="data_specification_table")
+            # data_specification_table.add_columns("Display Name", "Description", "Qualified Name")
+            # data_specification_table.cursor_type = "row"
+            # data_specification_table.zebra_stripes = True
+            # try:
+            #     self.data_specification_data = exec_report_spec(format_set_name="Data-Specifications",
+            #                                                      output_format="DICT",
+            #                                                      params = {"search_string": "*"},
+            #                                                      view_server=self.view_server,
+            #                                                      view_url=self.platform_url,
+            #                                                      user=self.user_name,
+            #                                                      user_pass=self.user_password)
+            # except PyegeriaException as e:
+            #     self.log(f"Error retrieving data specification details: {e!s}")
+            #     self.exit(423)
+            #     return (423)
+            #
+            # if isinstance(self.data_specification_data, dict):
+            #     self.data_specification_data_extract = self.data_specification_data.get("data")
+            # elif isinstance(self.data_specification_data, list):
+            #     self.data_specification_data_extract = self.data_specification_data
+            # else:
+            #     self.data_specification_data_extract = self.data_specification_data.get("Data-Specifications") or []
+            #
+            # if self.data_specification_data_extract == [] or self.data_specification_data_extract == {} or self.data_specification_data_extract == None:
+            #     self.log(f"No data specifications found for user {self.user_name}")
+            #     data_specification_table.add_row("No data specifications found", "No data returned from Egeria", "")
+            # else:
+            #     self.log(f"Found {self.data_specification_data_extract} data specifications for user {self.user_name}")
+            #
+            #     for spec in self.data_specification_data_extract:
+            #         data_specification_table.add_row(spec.get("Display Name", ""),
+            #                                       spec.get("Description", ""),
+            #                                       spec.get("Qualified Name", ""))
+            #         continue
+
+            # Root Collections
+
+            self.root_collection_table = DataTable(id="root_collection_table")
+            self.root_collection_table.add_columns("Root Collection Name", "Description", "GUID")
+            self.root_collection_table.cursor_type = "row"
+            self.root_collection_table.zebra_stripes = True
+
             try:
-                self.data_specification_data = exec_report_spec(format_set_name="Data-Specifications",
-                                                                 output_format="DICT",
-                                                                 params = {"search_string": "*"},
-                                                                 view_server=self.view_server,
-                                                                 view_url=self.platform_url,
-                                                                 user=self.user_name,
-                                                                 user_pass=self.user_password)
+                self.collections = exec_report_spec(format_set_name="BasicCollections",
+                                               output_format="DICT",
+                                               params = {"search_string": "RootCollection"},
+                                               view_server=self.view_server,
+                                               view_url=self.platform_url,
+                                               user=self.user_name,
+                                               user_pass=self.user_password)
+
             except PyegeriaException as e:
-                self.log(f"Error retrieving data specification details: {e!s}")
-                self.exit(423)
-                return (423)
-
-            if isinstance(self.data_specification_data, dict):
-                self.data_specification_data_extract = self.data_specification_data.get("data")
-            elif isinstance(self.data_specification_data, list):
-                self.data_specification_data_extract = self.data_specification_data
-            else:
-                self.data_specification_data_extract = self.data_specification_data.get("Data-Specifications") or []
-
-            if self.data_specification_data_extract == [] or self.data_specification_data_extract == {} or self.data_specification_data_extract == None:
-                self.log(f"No data specifications found for user {self.user_name}")
-                data_specification_table.add_row("No data specifications found", "No data returned from Egeria", "")
-            else:
-                self.log(f"Found {self.data_specification_data_extract} data specifications for user {self.user_name}")
-
-                for spec in self.data_specification_data_extract:
-                    data_specification_table.add_row(spec.get("Display Name", ""),
-                                                  spec.get("Description", ""),
-                                                  spec.get("Qualified Name", ""))
+                print_basic_exception(e)
+                self.collections = "Error retrieving collections: " + str(e)
+            self.log(f"Found {len(self.collections)} root collections for user {self.user_name}")
+            self.log(f"Root collections: {self.collections}")
+            if isinstance(self.collections, str):
+                self.root_collection_table.add_row("No root collections found", self.collections, "")
+            elif isinstance(self.collections, dict) and self.collections.get("kind") == "json":
+                self.collections:list[dict] = self.collections.get("data")
+                for collection in self.collections:
+                    self.root_collection_table.add_row(collection.get("Qualified Name"), collection.get("Type Name"), collection.get("GUID"))
                     continue
+            elif isinstance(self.collections, list):
+                for collection in self.collections:
+                    self.root_collection_table.add_row(collection.get("Qualified Name"), collection.get("Type Name"), collection.get("GUID"))
+                    continue
+            else:
+                self.log(f"Unexpected data type returned from Egeria: {type(self.collections)}")
+                self.root_collection_table.add_row("Invalid data type", "Unexpected data type returned from Egeria", "")
 
             # hand the data to the Screen for displaying
-            await self.push_screen(ShopForDataScreen(glossary_table, digital_product_catalog_table, data_dictionary_table, business_domain_table, data_specification_table ), callback = self.shop_for_data_callback)
+            await self.push_screen(ShopForDataScreen(glossary_table,
+                                                     digital_product_catalog_table,
+                                                     data_dictionary_table,
+                                                     business_domain_table,
+                                                     # data_specification_table,
+                                                     self.root_collection_table,
+                                                     self.user_name,
+                                                     self.user_password,
+                                                     self.view_server,
+                                                     self.platform_url),
+                                   callback = self.shop_for_data_callback)
 
         elif selected_option == "User Bookmarks":
             pass
@@ -799,9 +845,12 @@ class MyProfileApp(App):
         elif selection_type == "glossary":
             self.log(f"Selected glossary with qualified name: {selection_parm_2}")
             self.build_glossary_details(selection_parm_1, selection_parm_2)
-        elif selection_type == "specification":
-            self.log(f"Selected data specification with qualified name: {selection_parm_2}")
-            self.build_data_specification_details(selection_parm_1, selection_parm_2)
+        elif selection_type == "collection":
+            self.log(f"Selected RootCollection with qualified name: {selection_parm_1}")
+            self.build_root_collection_details(selection_parm_1, selection_parm_2)
+        # elif selection_type == "specification":
+        #     self.log(f"Selected data specification with qualified name: {selection_parm_2}")
+        #     self.build_data_specification_details(selection_parm_1, selection_parm_2)
         else:
             self.log(f"Unknown selection type: {selection_type}")
             self.exit(429)
@@ -1057,68 +1106,96 @@ class MyProfileApp(App):
                                                  self.user_password,
                                                  data_tree=glossary_tree), callback=self.overview_callback)
 
-    def build_data_specification_details(self, target_qualified_name, target_display_name):
-        """ Build the details object for a data specification details screen"""
-        self.log(f"Building data specification details for qualified name: {target_qualified_name}")
-        self.data_specification_qualified_name = target_qualified_name
-        self.data_specification_display_name = target_display_name
+    def build_root_collection_details(self, target_qualified_name, target_display_name):
+        """ Build the details object for a root collection details screen"""
+        member_tree: Tree = Tree(label="Root Collection", id="root_collection_members_tree")
+        member_tree.root.expand()
+        member_tree.auto_expand = True
 
-        try:
-            self.data_specification_details = exec_report_spec(format_set_name="Data-Specifications",
-                                                  output_format="JSON",
-                                                  params={"search_string": self.data_specification_qualified_name, "filter_string": self.data_specification_qualified_name},
-                                                  view_server=self.view_server,
-                                                               view_url=self.platform_url,
-                                                               user=self.user_name,
-                                                               user_pass=self.user_password)
-        except Exception as e:
-            self.log(f"Error retrieving data specification details: {e}")
-            return
-        self.log(f"data_specification_details: {self.data_specification_details}")
-        if not self.data_specification_details or self.data_specification_details == None or self.data_specification_details.get("kind") == "empty":
-            self.log(f"No data specification details found for qualified name: {self.data_specification_qualified_name}")
-            error_category = "Data Specification Details"
-            error_message = "No data specification details found"
-            self.log(f"Error retrieving data specification details: {error_category}, {error_message}")
-            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-            return
+        self.log(f"Building root collection details for qualified name: {target_qualified_name}")
+        self.root_collection_qualified_name = target_qualified_name
+        collection_branch = member_tree.root.add(self.root_collection_qualified_name, expand=True)
+        self.log(f"self_collections: {self.collections}")
+        collection = self.collections[0]
+        self.log(f"collection: {collection}")
+        if target_qualified_name == collection.get("Qualified Name"):
+            root_collection_contains: str  = collection.get("Containing Members") or None
+            self.log(f"root_collection_contains: {root_collection_contains}")
+            folders = str.split(root_collection_contains, ', ')
+            for folder in folders:
+                collection_branch.add_leaf(folder)
+                continue
 
-        self.log(f"Data specification details retrieved successfully for qualified name: {self.data_specification_qualified_name}")
-        self.log(f"Data specification details: {self.data_specification_details}")
-
-        data_spec_tree: Tree = Tree(label=self.data_specification_display_name, id="data_specification_tree")
-        data_spec_tree.root.expand()
-        data_spec_tree.auto_expand = True
-        self.data_specification_details_data = self.data_specification_details.get("data")
-        self.log(f"Data specification details data: {self.data_specification_details_data}")
-
-        if not self.data_specification_details_data or self.data_specification_details_data == None:
-            error_category = "Data Specification Details"
-            error_message = "No data specification details found or the data dict entry is missing"
-            self.log(f"Error retrieving data specification details: {error_category}, {error_message}")
-            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-            return
-
-        specified_id = 0
-        for spec in self.data_specification_details_data:
-            spec_qualified_name = spec.get("properties", {}).get("qualifiedName") or ""
-            spec_type = spec.get("properties", {}).get("typeName") or ""
-            spec_description = spec.get("properties", {}).get("description") or ""
-            spec_url = spec.get("properties", {}).get("URL") or ""
-            spec_display_name = spec.get("properties", {}).get("displayName") or ""
-            spec_fixed_label = spec_display_name.replace(" ", "")
-            spec_fixed_label = spec_fixed_label.replace(":", "")
-            self.log(f"Creating tree node for spec: {spec_fixed_label}, with id: {"id"+str(specified_id)}")
-            spec_branch = data_spec_tree.root.add(spec_fixed_label, id="id"+str(specified_id), data=[(spec_display_name, spec_qualified_name, spec_type, spec_description, spec_url)])
-            spec_branch.expand()
-            data_spec_tree.root.expand()
-            specified_id +=1
-        self.push_screen(SelectionOverviewScreen("specification",
+        self.push_screen(SelectionOverviewScreen("collection",
                                                  self.view_server,
                                                  self.platform_url,
                                                  self.user_name,
                                                  self.user_password,
-                                                 data_tree=data_spec_tree), callback=self.overview_callback)
+                                                 data_tree=member_tree), callback=self.overview_callback)
+
+
+    # def build_data_specification_details(self, target_qualified_name, target_display_name):
+    #     """ Build the details object for a data specification details screen"""
+    #     self.log(f"Building data specification details for qualified name: {target_qualified_name}")
+    #     self.data_specification_qualified_name = target_qualified_name
+    #     self.data_specification_display_name = target_display_name
+    #
+    #     try:
+    #         self.data_specification_details = exec_report_spec(format_set_name="Data-Specifications",
+    #                                               output_format="JSON",
+    #                                               params={"search_string": self.data_specification_qualified_name, "filter_string": self.data_specification_qualified_name},
+    #                                               view_server=self.view_server,
+    #                                                            view_url=self.platform_url,
+    #                                                            user=self.user_name,
+    #                                                            user_pass=self.user_password)
+    #     except Exception as e:
+    #         self.log(f"Error retrieving data specification details: {e}")
+    #         return
+    #     self.log(f"data_specification_details: {self.data_specification_details}")
+    #     if not self.data_specification_details or self.data_specification_details == None or self.data_specification_details.get("kind") == "empty":
+    #         self.log(f"No data specification details found for qualified name: {self.data_specification_qualified_name}")
+    #         error_category = "Data Specification Details"
+    #         error_message = "No data specification details found"
+    #         self.log(f"Error retrieving data specification details: {error_category}, {error_message}")
+    #         self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+    #         return
+    #
+    #     self.log(f"Data specification details retrieved successfully for qualified name: {self.data_specification_qualified_name}")
+    #     self.log(f"Data specification details: {self.data_specification_details}")
+    #
+    #     data_spec_tree: Tree = Tree(label=self.data_specification_display_name, id="data_specification_tree")
+    #     data_spec_tree.root.expand()
+    #     data_spec_tree.auto_expand = True
+    #     self.data_specification_details_data = self.data_specification_details.get("data")
+    #     self.log(f"Data specification details data: {self.data_specification_details_data}")
+    #
+    #     if not self.data_specification_details_data or self.data_specification_details_data == None:
+    #         error_category = "Data Specification Details"
+    #         error_message = "No data specification details found or the data dict entry is missing"
+    #         self.log(f"Error retrieving data specification details: {error_category}, {error_message}")
+    #         self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+    #         return
+    #
+    #     specified_id = 0
+    #     for spec in self.data_specification_details_data:
+    #         spec_qualified_name = spec.get("properties", {}).get("qualifiedName") or ""
+    #         spec_type = spec.get("properties", {}).get("typeName") or ""
+    #         spec_description = spec.get("properties", {}).get("description") or ""
+    #         spec_url = spec.get("properties", {}).get("URL") or ""
+    #         spec_display_name = spec.get("properties", {}).get("displayName") or ""
+    #         spec_fixed_label = spec_display_name.replace(" ", "")
+    #         spec_fixed_label = spec_fixed_label.replace(":", "")
+    #         self.log(f"Creating tree node for spec: {spec_fixed_label}, with id: {"id"+str(specified_id)}")
+    #         spec_branch = data_spec_tree.root.add(spec_fixed_label, id="id"+str(specified_id), data=[(spec_display_name, spec_qualified_name, spec_type, spec_description, spec_url)])
+    #         spec_branch.expand()
+    #         data_spec_tree.root.expand()
+    #         specified_id +=1
+    #     self.push_screen(SelectionOverviewScreen("specification",
+    #                                              self.view_server,
+    #                                              self.platform_url,
+    #                                              self.user_name,
+    #                                              self.user_password,
+    #                                              data_tree=data_spec_tree), callback=self.overview_callback)
 
     def overview_callback(self, r_code):
         """Callback function for handling overview screen actions."""
