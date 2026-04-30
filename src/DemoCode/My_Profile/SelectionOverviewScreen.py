@@ -60,9 +60,9 @@ class SelectionOverviewScreen(ModalScreen):
                 except NoMatches:
                     self.dismiss(414)
                     return
-            elif self.category == "specification":
+            elif self.category == "collection":
                 try:
-                    self.data_tree: Tree = self.app.query_one("#data_specification_tree", Tree)
+                    self.data_tree: Tree = self.app.query_one("#root_collection_tree", Tree)
                 except NoMatches:
                     self.dismiss(415)
                     return
@@ -114,8 +114,10 @@ class SelectionOverviewScreen(ModalScreen):
             self.display_selected_data_dictionary(self.node_GUID)
         elif self.category == "domain":
             self.display_selected_business_domain(self.node_GUID)
-        elif self.category == "specification":
-            self.display_selected_data_specification(self.node_GUID)
+        elif self.category == "collection":
+            self.display_selected_root_collection(self.node_GUID)
+        # elif self.category == "specification":
+        #     self.display_selected_data_specification(self.node_GUID)
 
     def display_selected_term_details(self, term_GUID) -> Any:
         """ The user has selected a glossary term, build a display of the term details,
@@ -163,35 +165,36 @@ class SelectionOverviewScreen(ModalScreen):
         """ The user has selected a glossary term, build a display of the term details,
                     and show along side the glossary tree """
         self.digital_product_GUID = digital_product_GUID
-        self.log(f"Selected digital product GUID: {self.digital_product_GUID}")
+        self.log(f"Selected digital product: {self.digital_product_GUID}")
         try:
             self.digital_product_data = exec_report_spec(format_set_name="Digital-Products",
-                                                       output_format="DICT",
-                                                       params={"search_string": self.digital_product_GUID,
+                                                        output_format="MD",
+                                                        params={"search_string": self.digital_product_GUID,
                                                                "filter_string": self.digital_product_GUID},
-                                                       view_server=self.view_server,
-                                                       view_url=self.platform_url,
-                                                       user=self.user_name,
-                                                       user_pass=self.user_password)
+                                                        view_server=self.view_server,
+                                                        view_url=self.platform_url,
+                                                        user=self.user_name,
+                                                        user_pass=self.user_password)
         except PyegeriaException as e:
-            # print_basic_exception(e)
+            print_basic_exception(e)
             self.log(f"Error retrieving digital product details: {e!s}")
-            # self.dismiss(421)
-            # return (421)
             self.digital_product_data = []
 
         container = self.query_one("#data_details_placeholder_container")
         container.remove_children()
 
-        if not self.digital_product_data or self.digital_product_data == []:
-            self.log(f"No digital product data returned for GUID: {self.digital_product_GUID}")
-            container.mount(Static(f"No digital product data returned for GUID: {self.digital_product_GUID}"))
+        if not self.digital_product_data or self.digital_product_data == [] or self.digital_product_data == None:
+            self.log(f"No digital product data returned for: {self.digital_product_GUID}")
+            container.mount(Static(f"No digital product data returned for: {self.digital_product_GUID}"))
         else:
-            self.log(f"Digital product data returned for GUID: {self.digital_product_GUID}")
-            text_area = TextArea(f"Digital product data returned for GUID: {self.digital_product_GUID}", id="digital_product_details_text_area",
-                     read_only=True)
-            container.mount(text_area)
-            text_area.text = str(self.digital_product_data)
+            self.log(f"Digital product data returned for: {self.digital_product_GUID}")
+            if isinstance(self.digital_product_data, dict) and self.digital_product_data.get("kind") == "text":
+                if self.digital_product_data.get("mime") == "text/markdown":
+                    self.digital_product_data = self.digital_product_data.get("content")
+                else:
+                    self.digital_product_data = "# No Markdown content found for this digital product"
+            markdown = Markdown(str(self.digital_product_data))
+            container.mount(markdown)
 
     def display_selected_data_dictionary(self, data_dictionary_GUID) -> Any:
         """ The user has selected a data dictionary, build a display of the dictionary details,
@@ -270,7 +273,7 @@ class SelectionOverviewScreen(ModalScreen):
         self.data_specification_qualified_name = data_specification_GUID
         self.log(f"Data specification selected: {self.data_specification_qualified_name}")
         try:
-            self_data_specification_data = exec_report_spec(format_set_name="Data-Specification",
+            self.data_specification_data = exec_report_spec(format_set_name="Data-Specification",
                                                             output_format="DICT",
                                                             params={"search_string": self.data_specification_qualified_name,
                                                                     "filter_string": self.data_specification_qualified_name},
@@ -279,10 +282,7 @@ class SelectionOverviewScreen(ModalScreen):
                                                             user=self.user_name,
                                                             user_pass=self.user_password)
         except PyegeriaException as e:
-            # print_basic_exception(e)
             self.log(f"Error retrieving data specification details: {e!s}")
-            # self.dismiss(431)
-            # return (431)
             self.data_specification_data = []
 
         container = self.query_one("#data_details_placeholder_container")
@@ -297,4 +297,42 @@ class SelectionOverviewScreen(ModalScreen):
                      id="data_specification_details_text_area",
                      read_only=True)
             container.mount(text_area)
-            text_area.text = str(self_data_specification_data)
+            text_area.text = str(self.data_specification_data)
+
+    def display_selected_root_collection(self, root_collection_GUID) -> int:
+        """ The user has selected a root collection, build a display of the collection details,
+            and show alongside the collection tree """
+        self.root_collection_GUID = root_collection_GUID
+        self.log(f"Selected root collection GUID: {self.root_collection_GUID}")
+        try:
+            self.root_collection_data = exec_report_spec(format_set_name="Collections",
+                                                         output_format="MD",
+                                                         params={"search_string": self.root_collection_GUID,
+                                                                 "filter_string": self.root_collection_GUID},
+                                                         view_server=self.view_server,
+                                                         view_url=self.platform_url,
+                                                         user=self.user_name,
+                                                         user_pass=self.user_password)
+
+        except PyegeriaException as e:
+            self.log(f"Error retrieving root collection data: {e}")
+            self.collection_data = []
+
+        container = self.query_one("#data_details_placeholder_container")
+        container.remove_children()
+
+        if not self.root_collection_data or self.root_collection_data == [] or self.root_collection_data == None:
+            self.log(f"No Root collection data returned for GUID: {self.root_collection_GUID}")
+            container.mount(Static(f"No Root collection data returned for GUID: {self.root_collection_GUID}"))
+        else:
+            self.log(f"Root collection data returned for GUID: {self.root_collection_GUID}")
+            if isinstance(self.root_collection_data, dict) and self.root_collection_data.get("kind") == "text":
+                if self.root_collection_data.get("mime") == "text/markdown":
+                    self.root_collection_data = self.root_collection_data.get("content")
+                else:
+                    self.root_collection_data = "No Markdown content found for this root collection"
+            markdown = Markdown(str(self.root_collection_data))
+            markdown.code_indent_guides = False
+            container.mount(markdown)
+            container.refresh()
+

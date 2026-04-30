@@ -58,17 +58,6 @@ Button {
     width: auto;
     background: cadetblue;
 }
-#domain_details {
-    height: auto;
-    width: auto;
-    background: cadetblue;
-}
-#dictionary_details {
-    height: auto;
-    width: auto;
-    background: cadetblue;
-}
-
 #instruction_static {
     column-span: 2;
     height: auto;

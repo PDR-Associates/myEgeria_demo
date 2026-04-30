@@ -53,7 +53,7 @@ class ShopForDataScreen(Screen):
             Static("Business Domain"),
             self.business_domain_table)
         yield ScrollableContainer(
-            Static("Data Specification"),
+            Static("Root Collection"),
             self.root_collection_table)
         yield Footer()
 
@@ -83,7 +83,7 @@ class ShopForDataScreen(Screen):
         row_description = row_values[1]
         row_qualified_name = row_values[2]
         self.log(f"Row selected: {row_selected}, values: {row_values}, display name: {row_display_name}, description: {row_description}, qualified name: {row_qualified_name}")
-        self.dismiss (["product", row_qualified_name, row_display_name])
+        self.dismiss (["catalog", row_qualified_name, row_display_name])
 
     @on(DataTable.RowSelected, "#data_dictionary_table")
     def handle_data_dictionary_table_selection(self, event: DataTable.RowSelected):

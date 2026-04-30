@@ -846,7 +846,7 @@ class MyProfileApp(App):
             self.log(f"Selected glossary with qualified name: {selection_parm_2}")
             self.build_glossary_details(selection_parm_1, selection_parm_2)
         elif selection_type == "collection":
-            self.log(f"Selected RootCollection with qualified name: {selection_parm_1}")
+            self.log(f"Selected Root Collection with qualified name: {selection_parm_1}")
             self.build_root_collection_details(selection_parm_1, selection_parm_2)
         # elif selection_type == "specification":
         #     self.log(f"Selected data specification with qualified name: {selection_parm_2}")
@@ -899,7 +899,7 @@ class MyProfileApp(App):
                 continue
             # Once the structure is complete we can build the tree from it
             for term_subject in build_structure:
-                dictionary_branch = dictionary_tree.root.add(term_subject, id=term_subject)
+                dictionary_branch = dictionary_tree.root.add(term_subject)
                 for term_qualified_name, term_summary in build_structure[term_subject]:
                     dictionary_branch.add_leaf(term_summary, data=term_qualified_name)
                 dictionary_tree.root.expand()
@@ -1011,28 +1011,32 @@ class MyProfileApp(App):
             catalog_tree: Tree = Tree(label=self.catalog_display_name, id="digital_product_catalog_tree")
             catalog_tree.root.expand()
             catalog_tree.auto_expand = True
-            self.catalog_details_data = self.catalog_details.get("data")
-
+            self.catalog_details_data: list[dict] = self.catalog_details.get("data")
+            self.log(f"catalog_details_data: {self.catalog_details_data}")
             if not self.catalog_details_data or self.catalog_details_data == None:
                 error_category = "Catalog Details"
                 error_message = "No catalog details found or the data dict entry is missing"
                 self.log(f"Error retrieving catalog details: {error_category}, {error_message}")
                 self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
                 return
-
-            for term in self.catalog_details_data:
-                term_qualified_name = term.get("Qualified Name") or ""
-                term_subject = term.get("Subject Area") or ""
-                term_summary = term.get("Summary") or ""
+            for product in self.catalog_details_data:
+                self.log(f"product: {product}")
+                term_qualified_name = product.get("Qualified Name") or ""
+                term_subject = product.get("Display Name") or ""
+                term_summary = product.get("Description") or ""
                 # create dict structure for loading the tree
                 build_structure.update({term_subject: [{term_qualified_name: term_summary}]})
+                self.log(f"build_structure: {build_structure}")
                 continue
             # Once the structure is complete we can build the tree from it
-            for term_subject in build_structure:
-                catalog_branch = catalog_tree.root.add(term_subject, id=term_subject)
-                for term_qualified_name, term_summary in build_structure[term_subject]:
-                    catalog_branch.add_leaf(term_summary, data=term_qualified_name)
-                catalog_tree.root.expand()
+            for instance in build_structure:
+                for data_prod in instance:
+                    catalog_branch = catalog_tree.root.add(data_prod)
+                    for term_qualified_name, term_summary in data_prod.items():
+                        catalog_branch.add_leaf(term_summary, data=term_qualified_name)
+                        self.log(f"term_qualified_name: {term_qualified_name}, term summary: {term_summary}")
+                    catalog_tree.root.expand()
+
         self.push_screen(SelectionOverviewScreen("catalog",
                                                  self.view_server,
                                                  self.platform_url,
@@ -1224,8 +1228,8 @@ class MyProfileApp(App):
             error_message = "query_one no matches fround for business domain tree"
             self.log(f"Error in selection overview processing: {error_category}, {error_message}")
         elif r_code == 415:
-            error_category = "Data Specification"
-            error_message = "query_one no matches found for data specification tree"
+            error_category = "Root Collections"
+            error_message = "query_one no matches found for root collections tree"
             self.log(f"Error in selection overview processing: {error_category}, {error_message}")
         else:
             # good return from overview screen
