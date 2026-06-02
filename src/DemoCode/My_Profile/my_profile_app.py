@@ -7,11 +7,15 @@
 """
 
 import datetime
+import pprint
 import re
+import json
 
 from prompt_toolkit.clipboard.pyperclip import PyperclipClipboard
 from pyegeria import load_app_config, settings, MyProfile, PyegeriaException, print_basic_exception, exec_report_spec, \
-    AutomatedCuration, MetadataExpert, ActorManager, EgeriaCat
+    AutomatedCuration, MetadataExpert, ActorManager, EgeriaCat, CollectionManager, ProductManager, \
+    PyegeriaInvalidParameterException, PyegeriaAPIException, DataEngineer
+from pyegeria.omvs import GovernanceOfficer
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import ScrollableContainer
@@ -28,6 +32,9 @@ from SelectionOverviewScreen import SelectionOverviewScreen
 from MyTeam import MyTeam
 from MainScreen import MainScreen
 from SearchForTermScreen import SearchForTermScreen
+from CreateSubscriptionRequestScreen import CreateSubscriptionRequestScreen
+from pyegeria import GovernanceOfficer
+
 
 class MyProfileApp(App):
     """My Profile App.
@@ -36,7 +43,10 @@ class MyProfileApp(App):
     If no profile is found, offers a UI to create one.
     """
 
-    BINDINGS = [("q", "quit", "Quit")]
+    BINDINGS = [("q", "quit", "Quit"),
+                ("r", "refresh", "Refresh Data"),
+                ]
+
     CSS_PATH = "my_profile.tcss"
 
     SCREENS = {
@@ -51,6 +61,7 @@ class MyProfileApp(App):
         "shop_4_data": ShopForDataScreen,
         "search_for_term": SearchForTermScreen,
         "overview": SelectionOverviewScreen,
+        "create_subscription": CreateSubscriptionRequestScreen,
         "my_team": MyTeam
     }
 
@@ -97,6 +108,8 @@ class MyProfileApp(App):
         self.display_glossary_data_extract = None
         self.digital_glossary_data_extract = None
         self.team_members: list[list] = []
+        self.max_mermaid_node_count = 0  # This is to tell egeria we dont want mermaid graphs in the response packet.
+        self.graph_query_depth = 0  # This tell egeria not to include relationships in the response packet
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -232,10 +245,10 @@ class MyProfileApp(App):
         self.projects_table.add_columns("Project Name", "Description", "Qualified Name")
 
         self.communities_table.clear(columns=True)
-        self.communities_table.add_columns("Assignment Type", "Community Name", "Description", "Qualified Name")
+        self.communities_table.add_columns("Assignment Type", "Community Name", "Description", "GUID")
 
         self.roles_table.clear(columns=True)
-        self.roles_table.add_columns("Role Name", "Description","GUID")
+        self.roles_table.add_columns("Role Name", "Role Type","Description", "GUID")
         self.roles_table.zebra = True
         self.roles_table.cursor_type = "row"
 
@@ -259,15 +272,16 @@ class MyProfileApp(App):
         for c in self.communities if isinstance(self.communities, list) else []:
             self.communities_table.add_row(
                 str(c.get("Assignment Type", "")),
-                str(c.get("Display Name", "")),
+                str(c.get("Name", "")),
                 str(c.get("Description", "")),
-                str(c.get("Qualified Name", ""))
+                str(c.get("GUID", ""))
             )
 
         for r in self.roles if isinstance(self.roles, list) else []:
             self.roles_table.add_row(
                 str(r.get("Name", "")),
                 str(r.get("Type", "")),
+                str(r.get("Description", "")),
                 str(r.get("GUID", "")),
             )
 
@@ -288,6 +302,13 @@ class MyProfileApp(App):
     def action_quit(self) -> None:
         # quit selected by user, so exit app
         self.exit(200)
+
+    async def action_refresh(self) -> None:
+        # refresh requested by User
+        self.log("Refreshing data...")
+        await self._load_or_create_profile()
+        await self._populate_tables()
+        self.log("Data refresh completed.")
 
     @on(OptionList.OptionSelected, "#other_function_list")
     async def handle_option_selected(self, event: OptionList.OptionSelected):
@@ -356,7 +377,8 @@ class MyProfileApp(App):
             try:
                 self.digital_product_catalog_data = exec_report_spec(format_set_name="Digital-Product-Catalog",
                                                                      output_format="DICT",
-                                                                     params = {"search_string" : "*"},
+                                                                     params =   {"search_string" : "*",
+                                                                                 "metadata_element_subtypes": ["DigitalProduct", "DigitalProductFamily"]},
                                                                      view_server=self.view_server,
                                                                      view_url=self.platform_url,
                                                                      user=self.user_name,
@@ -542,48 +564,52 @@ class MyProfileApp(App):
         self.tech_type_data_extracted = {}
         self.tech_type_templates = []
         self.tech_type_processes = []
-        # check that we got a valid result from the screen
+        # check that we got a valid result from the screen and process accordingly
         if not result or isinstance(result, int) :
-            self.log(f"Technology Types screen cancelled/failed; return: {result}, exiting.")
-            self.exit(result)
+            self.log(f"Technology Types screen cancelled or failed; return: {result}.")
+            await self.push_screen(MainScreen())
             return (result)
         self.selected_t_node = str(result)
         self.log(f"Technology Types screen returned: {self.selected_t_node}")
         # Request details for selected tech type
         try:
-            self.tech_type_data = exec_report_spec(format_set_name="Tech-Type-Details-MD",
-                                                   output_format="DICT",
-                                                   params={"search_string": self.selected_t_node, "filter_string": self.selected_t_node},
-                                                   view_server=self.view_server,
-                                                   view_url=self.platform_url,
-                                                   user=self.user_name,
-                                                   user_pass=self.user_password)
+            p_client = AutomatedCuration(self.view_server, self.platform_url, self.user_name, self.user_password)
+            token = p_client.create_egeria_bearer_token(self.user_name, self.user_password)
+            self.tech_type_data = p_client.get_tech_type_detail(filter_string=self.selected_t_node,
+                                                                output_format="JSON",
+                                                                # body={"maxMermaidNodeCount": self.max_mermaid_node_count,
+                                                                #       "graphQueryDepth": self.graph_query_depth}
+                                                                )
         except PyegeriaException as e:
             print_basic_exception(e)
-            self.log(f"Error retrieving technology type details: {e!s}")
-            self.exit(414)
-            return (414)
+            error_category = "Technology Type Process Detail Retrieval"
+            error_message = f"Failed to retrieve technology type process details for {self.selected_q_name}: {str(e)}"
+            self.log(f"Error retrieving technology type details: {error_category}, {error_message}")
+            await self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
 
         self.log(f"Technology Type Data: {self.tech_type_data}, type: {type(self.tech_type_data)}")
 
-        if self.tech_type_data.get("kind") is not None:
-            self.tech_type_data_extracted = self.tech_type_data.get("data")
-        else:
-            self.tech_type_data_extracted = {"Error": "No data found for this technology type."}
+        if "specificationMermaidGraph" in self.tech_type_data:
+            del self.tech_type_data["specificationMermaidGraph"]
+            self.log(f"Technology Type Mermaid Graph Removed")
 
-        self.log (f"Technology Type Data Extracted: {self.tech_type_data_extracted}")
+        self.tech_type_guid = self.tech_type_data.get("technologyTypeGUID")
+        self.tech_type_name = self.tech_type_data.get("displayName")
+        self.tech_type_templates = self.tech_type_data.get("catalogTemplates")
+        self.tech_type_templates = self.clean_structure(self.tech_type_templates)
+        self.tech_type_templates = self.bools_to_strings(self.tech_type_templates)
+        self.log(f"Templates: {self.tech_type_templates}, type: {type(self.tech_type_templates)}")
+        self.tech_type_processes = self.tech_type_data.get("governanceActionProcesses")
+        self.tech_type_processes = self.clean_structure(self.tech_type_processes)
+        self.tech_type_processes = self.bools_to_strings(self.tech_type_processes)
+        self.log(f"Processes: {self.tech_type_processes}, type: {type(self.tech_type_processes)}")
+        self.tech_type_description = self.tech_type_data.get("description")
 
-        for dataset in self.tech_type_data_extracted:
-            self.tech_type_guid = dataset.get("GUID")
-            self.tech_type_name = dataset.get("Display Name")
-            self.tech_type_templates = dataset.get("Catalog Templates")
-            self.tech_type_processes = dataset.get("Governance Processes")
-            self.tech_type_description = tech_type_description
-            self.log(f"Technology Type GUID: {self.tech_type_guid}")
-            self.log(f"Technology Type Name: {self.tech_type_name}")
-            self.log(f"Technology Type Description: {self.tech_type_description}")
-            self.log(f"Technology Type Templates: {self.tech_type_templates}" or [{"templates": "None"}])
-            self.log(f"Technology Type Processes: {self.tech_type_processes}" or [{"processes": "None"}])
+        self.log(f"Technology Type GUID: {self.tech_type_guid}")
+        self.log(f"Technology Type Name: {self.tech_type_name}")
+        self.log(f"Technology Type Description: {self.tech_type_description}")
+        self.log(f"Technology Type Templates: {self.tech_type_templates}" or [{"templates": "None"}])
+        self.log(f"Technology Type Processes: {self.tech_type_processes}" or [{"processes": "None"}])
 
         await self.push_screen(TechnologyTypeOptionsScreen(self.tech_type_guid,
                                                self.tech_type_name,
@@ -595,26 +621,48 @@ class MyProfileApp(App):
                                                self.tech_type_processes), callback = self.tech_type_options_callback)
         return(200)
 
-    async def tech_type_options_callback(self, result: list):
+    async def tech_type_options_callback(self, result:list):
         self.log(f"Technology Type Options screen returned: {result}")
-        if not result[0] or isinstance(result[0], int):
-            if isinstance(result[0], int) and result[0] == 200:
+        self.selected_t_option = None
+        self.selected_t_option_selected = None
+
+        if not result or result == None:
+            self.log(f"Technology Type Options screen returned no input; return: {result}.")
+            await self.push_screen(MainScreen())
+        elif isinstance(result, int) or isinstance(result, str):
+            if not result or result == "back":
+                self.log(f"Technology Type Options screen cancelled/failed; return: {result}, exiting.")
+                await self.push_screen(MainScreen())
+            elif isinstance(result, int) and result == 200:
                 self.log("Technology Type Options screen returned successfully.")
-                return(200)
-            else:
+                await self.push_screen(MainScreen())
+            elif isinstance(result, int) and result != 200:
                 self.log(f"Technology Type Options screen cancelled/failed; return: {result}, exiting.")
                 self.exit(415)
-            self.log(f"Technology Type Options screen cancelled/failed; return: {result}, exiting.")
-            self.exit(415)
-            return
-
-        self.selected_t_option = str(result[0])
-        self.selected_t_option_selected = result[1]
-        self.log(f"Technology Type Options screen returned: {self.selected_t_option} | {self.selected_t_option_selected}")
+            else:
+                self.log(f"Technology Type Options screen returned unexpected result: {result}, type: {type(result)}")
+        elif isinstance(result, list):
+            self.log(f"Input is a list: {result}, type: {type(result)}")
+            self.log(f"Result 0 = {result[0]}, 1 = {result[1]}")
+            if not result[0] or isinstance(result[0], int):
+                if isinstance(result[0], int) and result[0] == 200:
+                    self.log("Technology Type Options screen returned successfully.")
+                    await self.push_screen(MainScreen())
+            elif isinstance(result, list) and result[0] == "back":
+                await self.push_screen(MainScreen())
+            else:
+                    self.selected_t_option = str(result[0])
+                    self.selected_t_option_selected = str(result[1])
+                    self.log(f"Technology Type Options screen returned: {self.selected_t_option} | {self.selected_t_option_selected}")
+        else:
+            self.log(f"Technology Type Options screen cancelled/failed; return: {result}, type: {type(result)}.")
+            await self.push_screen(MainScreen())
 
         # display the screen so the objects we need to mount to are created in the DOM
         # then we can build the display elements for the placeholder properties
         # and mount them in the appropriate containers on the screen
+
+        self.log(f"Selected: {self.selected_t_option} | {self.selected_t_option_selected}")
         if self.selected_t_option == "template":
             await self.push_screen(TechnologyTypeTemplatesScreen(self.user_name,
                                                              self.karma_points,
@@ -700,12 +748,11 @@ class MyProfileApp(App):
         # Check for return code
         if isinstance(result, int):
             self.log(f"Technology Type Templates screen returned: {result}, exiting.")
-            self.exit(result)
+            return(result)
         # Check for unexpected return
         if not result or result[0] != "input":
             self.log(f"Technology Type Templates screen cancelled/failed; return: {result}, exiting.")
-            self.exit(418)
-            return
+            return(418)
 
             # make the keys to the input data match the keys in the template structure
             # take each key and use the data value to replace the placeholder value in the template
@@ -776,9 +823,9 @@ class MyProfileApp(App):
         # now instantiate and call the function to create the element from the template
         try:
             tokendata = self.autoc.create_egeria_bearer_token(self.user_name, self.user_password)
-            my_md_instance = MetadataExpert(self.view_server, self.platform_url, self.user_name, self.user_password, tokendata)
+            my_md_instance = AutomatedCuration(self.view_server, self.platform_url, self.user_name, self.user_password, tokendata)
             # new_guid = my_md_instance.create_metadata_element_from_template(self.template_guid, body = request_body)
-            new_guid = my_md_instance.create_metadata_element_from_template(body=request_body)
+            new_guid = my_md_instance.initiate_gov_action_process(body=request_body)
         except Exception as e:
             self.log(f"Exception in create_element_from_template: {e}")
             if isinstance(e, PyegeriaException):
@@ -801,21 +848,136 @@ class MyProfileApp(App):
 
     def tech_type_processes_callback(self, result):
         """ Callback for Technology Type Processes screen"""
-        # take the input data and use it to run the command/process
-        pass
+        # take the input data and use it to get the template for running the process, display it and allow
+        #the user to complete the data in the placeholders in order to run the process
+        self.type = None
+        self.full_process = None
+        self.result = result
+        if isinstance(result, int):
+            self.log(f"Technology Type Processes Screen returned: {result}, exiting.")
+            return(result)
+        if isinstance(self.result, list):
+            self.type = result[0]
+            self.input_data = result[1]
+            self.full_process = result[2]
+            self.log(f"Received process type: {self.type}, data: {self.input_data}, full process: {self.full_process}")
+        else:
+            self.log(f"Unexpected result type from TechnologyTypeProcessesScreen: {type(result)}, exiting.")
+            return(418)
+        if self.type != "input":
+            self.log(f"Process type is not 'input', {self.type}, display error screen")
+            error_category = "Governance Action Process"
+            error_message = "Unknown response from TechnologyTypeProcessesScreen: "+self.type
+            self.log(f"Error retrieving glossary term details: {error_category}, {error_message}")
+            self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+        my_process_property_values: list[dict] = [{}]
+        if not isinstance(self.result, dict):
+            self.log("No process Request Parameter input data returned, this is possibly valid, but unlikely")
+            self.log(f" Input data type: {type(self.result)}, data: {self.result}")
+            self.log("Processing will proceed with no Supported Request Parameters for the process")
+            self.result = {None:None}
+        else:
+            for input_key, input_value in self.result.items():
+                self.log(f"Processing input value: {input_key} with value: {input_value}")
+                input_fix1 = input_key.replace("_", " ")
+                input_fix2 = input_fix1.replace(" process input", "")
+                self.log(f"Process input key after cleaning: {input_fix2}")
+                my_process_property_values.append (
+                    {"class":"SupportedRequestParameter",
+                    "specificationPropertyType": "SUPPORTED_REQUEST_PARAMETER",
+                    "name": input_fix2,
+                    "value": input_value,
+                    "Description": "",
+                    "dataType": "string",
+                    "example": "",
+                    "required": "False"})
+                continue
+
+        self.log(f"Process property values: {my_process_property_values}")
+        self.log(f"Original input: {self.result}")
+        self.log(f"full process: {self.full_process}")
+
+        request_body: dict ={
+            "displayName": self.result.get("displayName"),
+            "description": self.result.get("description"),
+            "additionalProperties":
+                {"templateGUID": self.result.get("additionalProperties")("templateGUID")},
+            "specification":
+                {"supportedRequestParameter":
+                        my_process_property_values
+                }
+        }
+
+    def tech_type_processes_details(self, tech_type, selected_t_option_selected):
+        """ Retrieve process data for Technology Type Processes screen"""
+        # **************************************************************************************************
+        # take the input data and use it to get the template for running the process, display it and allow
+        # the user to complete the data in the placeholders in order to run the process
+        # with the change to retrieve the JSON this specific processing is no longer needed
+        # **************************************************************************************************
+        self.type = None
+        self.full_process = None
+        self.selected_q_name = None
+        required_process = None
+        self.type = str(tech_type)
+        self.selected_q_name = str(selected_t_option_selected)
+        self.log(f"Received process type: {self.type}, selected: {self.selected_q_name}")
+
+        if self.selected_q_name != None:
+            self.log(f"Selected qualified name: {self.selected_q_name}")
+            try:
+                p_client = AutomatedCuration(self.view_server, self.platform_url, self.user_name, self.user_password)
+                token = p_client.create_egeria_bearer_token(self.user_name, self.user_password)
+                governance_actions = p_client.get_tech_type_detail(filter_string=self.selected_q_name, output_format="JSON")
+            except PyegeriaException as e:
+                print_basic_exception(e)
+                error_category = "Technology Type Process Detail Retrieval"
+                error_message = f"Failed to retrieve technology type process details for {self.selected_q_name}: {str(e)}"
+                self.log(f"Error retrieving technology type details: {error_category}, {error_message}")
+                self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
+            self.log(f"Egeria returned: {governance_actions}, type: {type(governance_actions)}")
+            # load Json data
+            if isinstance(governance_actions, str):
+                if governance_actions != "No elements found":
+                    technology_response = json.loads(governance_actions)
+                else:
+                    technology_response = None
+            else:
+                technology_response = governance_actions
+
+            self.log(f"Tech type process data retrieved: {technology_response}")
+            self.governance_action_processes = technology_response.get("governanceActionProcesses", [])
+            self.log(f"Retrieved {len(self.governance_action_processes)} governance action processes for {self.selected_q_name}")
+            self.log(f"Data: {self.governance_action_processes}")
+            for process in self.governance_action_processes:
+                self.log(f"Process: {process['name']}, Description: {process['description']}")
+                if process['name'] == self.selected_q_name:
+                    self.log(f"Found requested process: {process['description']}")
+                    # temporary end of function, more code needed here.
+                    required_process = process
+                    break
+                else:
+                    continue
+
+            return(required_process)
+        else:
+            self.log(f"selected_q_name in process_details function is None, returnng None to caller: {self.selected_q_name}")
+            return(None)
 
     async def shop_for_data_callback(self, result):
         """ Callback for Shop For Data screen"""
-        if isinstance(result, int):
+        if isinstance(result[0], int):
             selection_type = int(result)
             selection_parm_1 = None
             selection_parm_2 = None
+            selection_parm_3 = None
             self.log(f"Shop For Data screen returned: {selection_type}, type: {type(selection_type)}.")
         else:
             self.log(f"Shop For Data screen returned: {result}, type: {type(result)}.")
             selection_type = result[0]
             selection_parm_1 = result[1]
             selection_parm_2 = result[2]
+            # selection_parm_3 = result[3]
             self.log(f"Shop For Data screen returned: {selection_type}, with parameters: {selection_parm_1}, {selection_parm_2}")
 
         if isinstance(selection_type, int):
@@ -829,28 +991,36 @@ class MyProfileApp(App):
                                                            self.view_server,
                                                            self.platform_url), callback=self.search_for_term_callback)
                 return(200)
+            elif selection_type == 211:
+                self.log(f"Shop For Data screen returned: {selection_type}, request to subscribe to data source ")
+                return(211)
+            elif selection_type == 212:
+                self.log(f"Shop For Data screen returned: {selection_type}, request to sample data source ")
+                self.request_to_sample_data_source(selection_parm_1, selection_parm_2, selection_parm_3)
             else:
                 self.log(f"Shop For Data screen returned: {selection_type}.")
                 return(selection_type)
 
         if selection_type == "dictionary":
+            # data dictionary
             self.log(f"Selected dictionary with qualified name: {selection_parm_1}")
             self.build_dictionary_details(selection_parm_1, selection_parm_2)
         elif selection_type == "domain":
+            # business domain
             self.log(f"Selected business domain with qualified name: {selection_parm_1}")
             self.build_domain_details(selection_parm_1, selection_parm_2)
         elif selection_type == "catalog":
+            # data product catalog
             self.log(f"Selected catalog with qualified name: {selection_parm_1}")
             self.build_catalog_details(selection_parm_1, selection_parm_2)
         elif selection_type == "glossary":
+            # glossary
             self.log(f"Selected glossary with qualified name: {selection_parm_2}")
             self.build_glossary_details(selection_parm_1, selection_parm_2)
         elif selection_type == "collection":
+            # root collection
             self.log(f"Selected Root Collection with qualified name: {selection_parm_1}")
             self.build_root_collection_details(selection_parm_1, selection_parm_2)
-        # elif selection_type == "specification":
-        #     self.log(f"Selected data specification with qualified name: {selection_parm_2}")
-        #     self.build_data_specification_details(selection_parm_1, selection_parm_2)
         else:
             self.log(f"Unknown selection type: {selection_type}")
             self.exit(429)
@@ -891,18 +1061,26 @@ class MyProfileApp(App):
             dictionary_tree.auto_expand = True
             self.dictionary_details_data = self.dictionary_details.get("data")
             for term in self.dictionary_details_data:
+                self.log(f"Dictionary term: {term} being processed")
                 term_qualified_name = term.get("Qualified Name") or ""
                 term_subject = term.get("Subject Area") or ""
                 term_summary = term.get("Summary") or ""
                 # create dict structure for loading the tree
-                build_structure.update({term_subject: [{term_qualified_name: term_summary}]})
+                if term_subject not in build_structure:
+                    build_structure[term_subject] = []
+                build_structure[term_subject].append({term_qualified_name: term_summary})
                 continue
             # Once the structure is complete we can build the tree from it
-            for term_subject in build_structure:
+            for term_subject, terms in build_structure.items():
+                self.log(f"Building tree for subject: {term_subject}, term: {terms}")
                 dictionary_branch = dictionary_tree.root.add(term_subject)
-                for term_qualified_name, term_summary in build_structure[term_subject]:
-                    dictionary_branch.add_leaf(term_summary, data=term_qualified_name)
+                dictionary_branch.expand()
+                for term_dict in terms:
+                    self.log(f"Adding term to tree: {term_dict}")
+                    for term_qualified_name, term_summary in term_dict.items():
+                        dictionary_branch.add_leaf(term_summary, data=term_qualified_name)
                 dictionary_tree.root.expand()
+
         self.push_screen(SelectionOverviewScreen("dictionary",
                                                  self.view_server,
                                                  self.platform_url,
@@ -956,17 +1134,22 @@ class MyProfileApp(App):
                 term_members = term.get("Containing Members")
                 term_memberof = term.get("Member Of")
                 # create dict structure for loading the tree
-                build_structure.update({term_qualified_name: [{"term_type": term_type}, {"term_GUID": term_GUID}, {"term_members": term_members},{"term_memberof": term_memberof}]})
+                build_structure[term_qualified_name] = {
+                    "term_type": term_type,
+                    "term_GUID": term_GUID,
+                    "term_members": term_members,
+                    "term_memberof": term_memberof
+                }
                 continue
             # Once the structure is complete we can build the tree from it
-            for qualified_name in build_structure:
-                domain_branch = domain_tree.root.add(qualified_name, id=qualified_name, data=[qualified_name.get("term_type"), qualified_name.get("term_GUID")])
-                if build_structure[qualified_name]["term_members"] != None:
+            for qualified_name, details in build_structure.items():
+                domain_branch = domain_tree.root.add(qualified_name, id=qualified_name, data=[details["term_type"], details["term_GUID"]])
+                if details["term_members"] != None:
                     domain_branch_members = domain_branch.add("Containing Members")
-                    for member in build_structure[qualified_name]["term_members"]:
+                    for member in details["term_members"]:
                         domain_branch_members.add_leaf(member)
-                if build_structure[qualified_name]["term_memberof"] != None:
-                    for member in build_structure[qualified_name]["term_memberof"]:
+                if details["term_memberof"] != None:
+                    for member in details["term_memberof"]:
                         domain_branch.add_leaf(member)
                 domain_tree.root.expand()
 
@@ -978,8 +1161,8 @@ class MyProfileApp(App):
                                                  data_tree=domain_tree), callback=self.overview_callback)
 
     def build_catalog_details(self, target_qualified_name, target_display_name):
-        """ Build the details object for a catalog details screen"""
-        self.log(f"Building catalog details for qualified name: {target_qualified_name}")
+        """ Build the details object for a product catalog details screen"""
+        self.log(f"Building product catalog details for qualified name: {target_qualified_name}")
         self.catalog_qualified_name = target_qualified_name
         self.catalog_display_name = target_display_name
         build_structure = {}
@@ -1025,24 +1208,65 @@ class MyProfileApp(App):
                 term_subject = product.get("Display Name") or ""
                 term_summary = product.get("Description") or ""
                 # create dict structure for loading the tree
-                build_structure.update({term_subject: [{term_qualified_name: term_summary}]})
+                if term_subject not in build_structure:
+                    build_structure[term_subject] = []
+                build_structure[term_subject].append({term_qualified_name: term_summary})
                 self.log(f"build_structure: {build_structure}")
                 continue
             # Once the structure is complete we can build the tree from it
-            for instance in build_structure:
-                for data_prod in instance:
-                    catalog_branch = catalog_tree.root.add(data_prod)
+            sample_data:list = []
+            for instance, data_prods in build_structure.items():
+                catalog_branch = catalog_tree.root.add(instance)
+                for data_prod in data_prods:
                     for term_qualified_name, term_summary in data_prod.items():
                         catalog_branch.add_leaf(term_summary, data=term_qualified_name)
                         self.log(f"term_qualified_name: {term_qualified_name}, term summary: {term_summary}")
-                    catalog_tree.root.expand()
+                catalog_tree.root.expand()
+                # get some sample data from the data source
+                if product:
+                    collection_memberships = product.get("Member Of")
+                    self.log(f"Collection memberships len: {len(collection_memberships)}")
+                if collection_memberships:
+                    data_set_data = None
+                    collection_membership_list = collection_memberships.split(",")
+                    self.log(f"Membership List: {collection_membership_list}")
+                    for membership_qname in collection_membership_list:
+                        self.log(f"Processing collection membership: {membership_qname}")
+                        if "DigitalProduct" in membership_qname:
+                            self.log(f"Processing dataset: {membership_qname}")
+                            try:
+                                # create client instance and retrieve data
+                                dclient = DataEngineer(self.view_server, self.platform_url, self.user_name, self.user_password)
+                                token = dclient.create_egeria_bearer_token(self.user_name, self.user_password)
+                                data_set_data = dclient.find_tabular_data_sets(
+                                                                           search_string=membership_qname,
+                                                                           start_from=0,
+                                                                           page_size=10,
+                                                                           output_format = "MD"
+                                                                           )
+                                self.log(f"Dataset data retrieved: {data_set_data}")
+                                if data_set_data == "No elements found":
+                                    sample_data.append(f"No data sample available at this time for {membership_qname}")
+                                else:
+                                    sample_data.append(data_set_data)
+                                continue
+                            except PyegeriaException as e:
+                                self.log(f"Error retrieving dataset data: {e}")
+                                print_basic_exception(e)
+                        else:
+                            continue
+                    # ************************************************************
+                    # once we have the correct data decide how we will display it!
+                    # ************************************************************
+                    self.log(f"Sample data: {sample_data}")
 
         self.push_screen(SelectionOverviewScreen("catalog",
                                                  self.view_server,
                                                  self.platform_url,
                                                  self.user_name,
                                                  self.user_password,
-                                                 data_tree=catalog_tree), callback=self.overview_callback)
+                                                 data_tree=catalog_tree,
+                                                 data_samples=sample_data), callback=self.overview_callback)
 
     def build_glossary_details(self, target_qualified_name, target_display_name):
         """ Build the details object for a glossary details screen"""
@@ -1138,71 +1362,13 @@ class MyProfileApp(App):
                                                  data_tree=member_tree), callback=self.overview_callback)
 
 
-    # def build_data_specification_details(self, target_qualified_name, target_display_name):
-    #     """ Build the details object for a data specification details screen"""
-    #     self.log(f"Building data specification details for qualified name: {target_qualified_name}")
-    #     self.data_specification_qualified_name = target_qualified_name
-    #     self.data_specification_display_name = target_display_name
-    #
-    #     try:
-    #         self.data_specification_details = exec_report_spec(format_set_name="Data-Specifications",
-    #                                               output_format="JSON",
-    #                                               params={"search_string": self.data_specification_qualified_name, "filter_string": self.data_specification_qualified_name},
-    #                                               view_server=self.view_server,
-    #                                                            view_url=self.platform_url,
-    #                                                            user=self.user_name,
-    #                                                            user_pass=self.user_password)
-    #     except Exception as e:
-    #         self.log(f"Error retrieving data specification details: {e}")
-    #         return
-    #     self.log(f"data_specification_details: {self.data_specification_details}")
-    #     if not self.data_specification_details or self.data_specification_details == None or self.data_specification_details.get("kind") == "empty":
-    #         self.log(f"No data specification details found for qualified name: {self.data_specification_qualified_name}")
-    #         error_category = "Data Specification Details"
-    #         error_message = "No data specification details found"
-    #         self.log(f"Error retrieving data specification details: {error_category}, {error_message}")
-    #         self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-    #         return
-    #
-    #     self.log(f"Data specification details retrieved successfully for qualified name: {self.data_specification_qualified_name}")
-    #     self.log(f"Data specification details: {self.data_specification_details}")
-    #
-    #     data_spec_tree: Tree = Tree(label=self.data_specification_display_name, id="data_specification_tree")
-    #     data_spec_tree.root.expand()
-    #     data_spec_tree.auto_expand = True
-    #     self.data_specification_details_data = self.data_specification_details.get("data")
-    #     self.log(f"Data specification details data: {self.data_specification_details_data}")
-    #
-    #     if not self.data_specification_details_data or self.data_specification_details_data == None:
-    #         error_category = "Data Specification Details"
-    #         error_message = "No data specification details found or the data dict entry is missing"
-    #         self.log(f"Error retrieving data specification details: {error_category}, {error_message}")
-    #         self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
-    #         return
-    #
-    #     specified_id = 0
-    #     for spec in self.data_specification_details_data:
-    #         spec_qualified_name = spec.get("properties", {}).get("qualifiedName") or ""
-    #         spec_type = spec.get("properties", {}).get("typeName") or ""
-    #         spec_description = spec.get("properties", {}).get("description") or ""
-    #         spec_url = spec.get("properties", {}).get("URL") or ""
-    #         spec_display_name = spec.get("properties", {}).get("displayName") or ""
-    #         spec_fixed_label = spec_display_name.replace(" ", "")
-    #         spec_fixed_label = spec_fixed_label.replace(":", "")
-    #         self.log(f"Creating tree node for spec: {spec_fixed_label}, with id: {"id"+str(specified_id)}")
-    #         spec_branch = data_spec_tree.root.add(spec_fixed_label, id="id"+str(specified_id), data=[(spec_display_name, spec_qualified_name, spec_type, spec_description, spec_url)])
-    #         spec_branch.expand()
-    #         data_spec_tree.root.expand()
-    #         specified_id +=1
-    #     self.push_screen(SelectionOverviewScreen("specification",
-    #                                              self.view_server,
-    #                                              self.platform_url,
-    #                                              self.user_name,
-    #                                              self.user_password,
-    #                                              data_tree=data_spec_tree), callback=self.overview_callback)
 
     def overview_callback(self, r_code):
         """Callback function for handling overview screen actions."""
+        if isinstance(r_code, list):
+            self.selected_item = r_code[1]
+            self.selected_tree = r_code[2]
+            r_code: int = r_code[0]
         if r_code == 410:
             error_category = "Collection Category"
             error_message = "Unknown collection category returned"
@@ -1234,8 +1400,59 @@ class MyProfileApp(App):
         else:
             # good return from overview screen
             self.log (f"Overview screen callback, return code : {r_code}")
-            # add more code here
-            pass
+            if r_code == 211:
+                # Subscribe to selected item
+                self.log(f"Subscribing to selected item: {self.selected_item} from {self.selected_tree}")
+                try:
+                    s_client = ProductManager(self.view_server, self.platform_url, self.user_name, self.user_password)
+                    s_client.create_egeria_bearer_token(self.user_name, self.user_password)
+                    s_client.create_digital_subscription(self.selected_item)
+                except (PyegeriaInvalidParameterException, PyegeriaAPIException, PyegeriaException):
+                    self.log(f"Error creating digital subscription: {self.selected_item} from {self.selected_tree}")
+                    # more error handling required here
+                    """ Request Body layout, not all fields are required to be completed
+                    {
+                          "class" : "NewAgreementRequestBody",
+                          "isOwnAnchor" : true,
+                          "anchorScopeGUID" : "",
+                          "parentGUID" : "",
+                          "parentRelationshipTypeName" : "CollectionMembership",
+                          "parentAtEnd1": true,
+                          "properties": {
+                            "class" : "DigitalSubscriptionProperties",
+                            "qualifiedName": "DigitalSubscription::",
+                            "displayName" : "display name",
+                            "description" : "Add description of the subscription here",
+                            "userDefinedStatus" : "DRAFT",
+                            "identifier" : "Add subscription identifier here",
+                            "supportLevel" : "Add the level of support agreed/requested",
+                            "serviceLevels" : {
+                              "property1Name" : "property1Value",
+                              "property2Name" : "property2Value"
+                            },
+                            "additionalProperties": {
+                              "property1Name" : "property1Value",
+                              "property2Name" : "property2Value"
+                             }
+                           },
+                           "initialStatus" : "OTHER",
+                           "externalSourceGUID": "add guid here",
+                           "externalSourceName": "add qualified name here",
+                           "effectiveTime" : "{{$isoTimestamp}}",
+                           "forLineage" : false,
+                           "forDuplicateProcessing" : false
+                    }"""
+                    self.push_screen(CreateSubscriptionRequestScreen(), callback=self.create_subscription_callback)
+            else:
+                self.push_screen(ShopForDataScreen(self.view_server, self.platform_url, self.user_name, self.user_password, self.selected_item, self.selected_tree), callback=self.shop_for_data_callback)
+
+    def create_subscription_callback(self, result):
+        """ Callback routine for create subscription request screen
+            This routine checks for valid input and then processes the subscription request """
+        if result is None:
+            self.log("User cancelled subscription creation")
+            return
+        self.log(f"Subscription created: {result}")
 
     def extract_glossary_terms(self, text):
         """
@@ -1306,9 +1523,10 @@ class MyProfileApp(App):
         role_table = event.data_table
         selected_row_key = event.row_key
         selected_row_data = role_table.get_row(selected_row_key)
-        selected_role_guid = selected_row_data[2]
+        selected_role_description = selected_row_data[2]
         selected_role_name = selected_row_data[0]
         selected_role_type = selected_row_data[1]
+        selected_role_guid = selected_row_data[3]
         self.log(f"Selected role: {selected_row_data}")
         team_members_list: list = []
         self.team_members = []
@@ -1452,6 +1670,87 @@ class MyProfileApp(App):
             self.log(f"Error retrieving team member details: {error_category}, {error_message}")
             self.push_screen(StatusScreen(f"{error_category}: {error_message}"), callback=self.status_callback)
 
+    def request_to_sample_data_source(self, selection_parm_1, selection_parm_2, selection_parm_3):
+        """ The user has requested to see a sample of the data from the selected data source """
+        self.row_highlighted = selection_parm_1
+        self.cursor_row_highlighted = selection_parm_2
+        self.data_table_highlighted = selection_parm_3
+        self.log(f"Data selected: row={selection_parm_1}, cursor_row={selection_parm_2}, data_table={selection_parm_3}")
+        selected_item = self.query_one("#"+self.data_table_highlighted, DataTable)
+        item_content = selected_item.get_row(self.row_highlighted)
+        
+
+    def truncate_at_sequence(self, data, target="specificationMermaidGraph"):
+        """
+        Recursively traverses data. Truncates strings containing the target
+        and drops all following sibling items within lists or dictionaries.
+        Returns (truncated_data, should_terminate_parent_container)
+        """
+        # Handle Strings
+        if isinstance(data, str):
+            if target in data:
+                # Drop the sequence and everything after it
+                truncated_str = data.split(target)[0]
+                return truncated_str, True
+            return data, False
+
+        # Handle Dictionaries
+        elif isinstance(data, dict):
+            new_dict = {}
+            for key, value in data.items():
+                # First, check if the key itself contains the target
+                if isinstance(key, str) and target in key:
+                    truncated_key = key.split(target)[0]
+                    if truncated_key:  # Keep key fragment if not empty
+                        new_dict[truncated_key] = value
+                    return new_dict, True
+
+                # Recursively check the value
+                updated_value, terminate = self.truncate_at_sequence(value, target)
+                new_dict[key] = updated_value
+                if terminate:
+                    return new_dict, True
+            return new_dict, False
+
+        # Handle Lists and Tuples
+        elif isinstance(data, (list, tuple)):
+            new_list = []
+            for item in data:
+                updated_item, terminate = self.truncate_at_sequence(item, target)
+                new_list.append(updated_item)
+                if terminate:
+                    break
+            # Maintain original type integrity
+            return (tuple(new_list) if isinstance(data, tuple) else new_list), terminate
+
+        # Handle Booleans, Numbers, None
+        return data, False
+
+    # Helper wrapper for clean execution
+    def clean_structure(self, data, target="specificationMermaidGraph"):
+        result, _ = self.truncate_at_sequence(data, target)
+        return result
+
+    def bools_to_strings(self, data):
+        """
+        Recursively traverses data structures and converts
+        all Boolean values into their corresponding string format.
+        """
+        # Check explicitly for bool first (since bool is a subclass of int in Python)
+        if isinstance(data, bool):
+            return str(data)
+
+        # Handle Dictionaries
+        elif isinstance(data, dict):
+            return {key: self.bools_to_strings(value) for key, value in data.items()}
+
+        # Handle Lists and Tuples
+        elif isinstance(data, (list, tuple)):
+            converted = [self.bools_to_strings(item) for item in data]
+            return tuple(converted) if isinstance(data, tuple) else converted
+
+        # Return all other types unchanged (ints, floats, strings, None)
+        return data
 
 if __name__ == "__main__":
     app = MyProfileApp()

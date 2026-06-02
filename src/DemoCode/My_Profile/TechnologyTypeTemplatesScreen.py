@@ -43,6 +43,7 @@ class TechnologyTypeTemplatesScreen(ModalScreen[Any]):
         self.selected_t_option_selected = tech_type_option_selected
         self.tech_type_templates = tech_type_templates
         self.full_template = None
+        self.selected_t_template = None
         load_app_config()
 
     async def on_mount(self) -> None:
@@ -56,46 +57,64 @@ class TechnologyTypeTemplatesScreen(ModalScreen[Any]):
             self.log(f"Technology Type Templates: {self.tech_type_templates}")
             if isinstance(self.tech_type_templates, list):
                 for template in self.tech_type_templates:
-                    if template.get("Catalog Template Name") == self.selected_t_option_selected:
+                    self.log(f"Template: {template.get('displayName')}, Selected: {self.selected_t_option_selected}")
+                    if self.selected_t_option_selected == template.get("displayName"):
                         self.full_template = template
-                        self.selected_t_template = template.get("Placeholder Properties")
+                        self.selected_t_template = template
                         self.log(f"Selected Template: {self.selected_t_template}")
                         break
                     else:
                         continue
             self.log(f"Selected Template: {self.selected_t_template}")
 
-            for placeholder in self.selected_t_template:
-                name = placeholder.get("Property Name") or None
-                Description = placeholder.get("Description") or None
-                Type = placeholder.get("Data Type") or None
-                Example = placeholder.get("Example") or None
-                Required = placeholder.get("Required") or False
+            if self.selected_t_template is None:
+                self.log("No template selected, skipping placeholder display")
+                return
+            else:
+                specification = self.selected_t_template.get("specification")
+                if specification is None:
+                    self.log("Selected template has no specification, skipping placeholder display")
+                    return
+                else:
+                    placeholderProperties = specification.get("placeholderProperty")
+                    if placeholderProperties is None:
+                        self.log("Selected template has no placeholder properties, skipping display")
+                        return
+                    else:
+                        for placeholder in placeholderProperties:
+                            if placeholder.get("class") != "PlaceholderProperty":
+                                continue
+                            else:
+                                name = placeholder.get("name") or None
+                                Description = placeholder.get("description") or None
+                                Type = placeholder.get("dataType") or None
+                                Example = placeholder.get("example") or None
+                                Required = placeholder.get("required") or False
 
-                # Sanitize the name for use as a CSS ID
-                safe_name = name.replace(" ", "_") if name else f"placeholder_{id(placeholder)}"
-                placeholder_text: TextArea = TextArea(
-                    f"{name}\n\nDescription: {Description}\nType: {Type}\nExample: {Example}\nRequired: {Required}",
-                    id=f"{safe_name}_placeholder_text_area",
-                    read_only=True
-                )
-                # Ensure TextArea is visible
-                placeholder_text.styles.height = 8
+                                # Sanitize the name for use as a CSS ID
+                                safe_name = name.replace(" ", "_") if name else f"placeholder_{id(placeholder)}"
+                                placeholder_text: TextArea = TextArea(
+                                    f"{name}\n\nDescription: {Description}\nType: {Type}\nExample: {Example}\nRequired: {Required}",
+                                    id=f"{safe_name}_placeholder_text_area",
+                                    read_only=True
+                                )
+                                # Ensure TextArea is visible
+                                placeholder_text.styles.height = 8
 
-                placeholder_input = Input(id=f"{safe_name}_placeholder_input", placeholder="Enter value here")
-                self.log(f"Placeholder: {placeholder_text.text}\n {placeholder_input}")
+                                placeholder_input = Input(id=f"{safe_name}_placeholder_input", placeholder="Enter value here")
+                                self.log(f"Placeholder: {placeholder_text.text}\n {placeholder_input}")
 
-                # Mount the TextArea and the associateds Input field into the ScrollableContainer
-                try:
-                    load_point = self.query_one("#technology_type_templates_input")
-                    await load_point.mount(placeholder_text, before="#submit_button")
-                    await load_point.mount(placeholder_input, before="#submit_button")
-                    self.log(f"Placeholder text area loaded: {placeholder_text.text}")
-                    self.log(f"Placeholder input loaded: {placeholder_input}")
-                    continue
-                except Exception as e:
-                    self.log(f"Error loading placeholder container: {e!s}")
-                    self.app.dismiss(416)
+                                # Mount the TextArea and the associated Input field into the ScrollableContainer
+                                try:
+                                    load_point = self.query_one("#technology_type_templates_input")
+                                    await load_point.mount(placeholder_text, before="#template_submit_button")
+                                    await load_point.mount(placeholder_input, before="#template_submit_button")
+                                    self.log(f"Placeholder text area loaded: {placeholder_text.text}")
+                                    self.log(f"Placeholder input loaded: {placeholder_input}")
+                                    continue
+                                except Exception as e:
+                                    self.log(f"Error loading placeholder container: {e!s}")
+                                    self.app.dismiss(416)
 
     def compose(self) -> ComposeResult:
         """ Compose the UI components for the Technology_Type_Templatess screen."""
@@ -103,7 +122,7 @@ class TechnologyTypeTemplatesScreen(ModalScreen[Any]):
         yield Static("Please complete the required fields and any optional fields you prefer:")
         yield ScrollableContainer(
             Static("Technology Type Template Input"),
-            Button("Submit", id="submit_button"),
+            Button("Submit", id="template_submit_button"),
             id="technology_type_templates_input"
         )
         yield Footer()
@@ -112,7 +131,7 @@ class TechnologyTypeTemplatesScreen(ModalScreen[Any]):
         """ The quit option in the footer has been selected. Dismiss the screen."""
         self.dismiss("200", )
 
-    @on(Button.Pressed, "#submit_button")
+    @on(Button.Pressed, "#template_submit_button")
     def handle_submit_button_pressed(self, event: Button.Pressed) -> None:
         """ The submit button has been pressed."""
         self.log(f"Submit button pressed, button: {event.button}")

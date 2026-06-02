@@ -62,13 +62,12 @@ class ShopForDataScreen(Screen):
         self.header = f"Egeria Data Sources for user {self.user_name}"
         self.sub_header = "Shop for Data"
 
-    # @on(DataTable.RowSelected)
-    # def handle_data_table_highlight(self, event: DataTable.RowHighlighted):
-    #     self.row_highlighted = event.row_key
-    #     self.cursor_row_highlighted = event.cursor_row
-    #     self.data_table_highlighted = event.data_table
-    #     self.log(f"Row highlighted: {self.row_highlighted}")
-
+    @on(DataTable.RowHighlighted)
+    def handle_data_table_highlight(self, event: DataTable.RowHighlighted):
+        row_highlighted = event.row_key
+        cursor_row_highlighted = event.cursor_row
+        data_table_highlighted = event.data_table
+        self.log(f"Row highlighted: {row_highlighted}")
 
     @on(DataTable.RowSelected, "#glossary_table")
     def handle_glossary_table_selection(self, event: DataTable.RowSelected):
@@ -84,6 +83,7 @@ class ShopForDataScreen(Screen):
     def handle_digital_product_catalog_table_selection(self, event: DataTable.RowSelected):
         row_selected = event.row_key
         self.log(f"Digital product row selected: {row_selected}, event: {event}")
+        # row_values = self.glossary_table.get_row(event.row_key)
         row_values = self.query_one("#digital_product_catalog_table", DataTable).get_row(event.row_key)
         self.log(f"Digital product row values: {row_values}")
         row_display_name = row_values[0]
@@ -112,15 +112,15 @@ class ShopForDataScreen(Screen):
         self.log(f"Row selected: {row_selected}, values: {row_values}, qualified name: {row_qualified_name}, type name: {row_type_name}, guid: {row_guid}")
         self.dismiss (["domain", row_qualified_name, row_type_name])
 
-    @on(DataTable.RowSelected, "#data_specification_table")
-    def handle_data_specification_table_selection(self, event: DataTable.RowSelected):
-        row_selected = event.row_key
-        row_values = self.query_one("#data_specification_table", DataTable).get_row(event.row_key)
-        row_display_name = row_values[0]
-        row_description = row_values[1]
-        row_qualified_name = row_values[2]
-        self.log(f"Row selected: {row_selected}, values: {row_values}, display name: {row_display_name}, description: {row_description}, qualified name: {row_qualified_name}")
-        self.dismiss (["specification", row_qualified_name, row_display_name])
+    # @on(DataTable.RowSelected, "#data_specification_table")
+    # def handle_data_specification_table_selection(self, event: DataTable.RowSelected):
+    #     row_selected = event.row_key
+    #     row_values = self.query_one("#data_specification_table", DataTable).get_row(event.row_key)
+    #     row_display_name = row_values[0]
+    #     row_description = row_values[1]
+    #     row_qualified_name = row_values[2]
+    #     self.log(f"Row selected: {row_selected}, values: {row_values}, display name: {row_display_name}, description: {row_description}, qualified name: {row_qualified_name}")
+    #     self.dismiss (["specification", row_qualified_name, row_display_name])
 
     @on (DataTable.RowSelected, "#root_collection_table")
     def handle_root_collection_table_selection(self, event: DataTable.RowSelected):
@@ -145,20 +145,20 @@ class ShopForDataScreen(Screen):
 
     def action_back(self) -> None:
         """ The back option in the footer has been selected. Dismiss the screen."""
-        self.dismiss([200])
+        self.dismiss(200)
 
     def action_search_for_term(self) -> None:
         """ The search for term option in the footer has been selected. Dismiss the screen."""
-        self.dismiss([201])
+        self.dismiss(201)
 
     def action_quit(self) -> None:
         """ The quit option in the footer has been selected. Dismiss the screen."""
-        self.dismiss([210])
+        self.dismiss(210)
 
-    # def action_subscribe_to_data(self) -> None:
-    #     """ The subscribe to data option in the footer has been selected."""
-    #     self.dismiss([211])
+    def action_subscribe_to_data(self) -> None:
+        """ The subscribe to data option in the footer has been selected."""
+        self.dismiss(211)
 
     def action_sample_data_source(self):
         """ The sample data source option in the footer has been selected."""
-        self.dismiss([212, self.row_highlighted, self.cursor_row_highlighted, self.data_table_highlighted])
+        self.dismiss(212)

@@ -19,8 +19,9 @@ from textual.widgets._option_list import Option
 class TechnologyTypeOptionsScreen(ModalScreen):
     """ Modal screen to display a technology type's templates and processes."""
     BINDINGS = [("q", "dismiss", "Quit"),
-                ("b", "back", "Go back"),
-                ("ctl+s", "Select", "tech_type_option_select")]
+                ("b", "back", "Go_Back"),
+                # ("ctl+s", "Select", "tech_type_option_select")
+                ]
 
     CSS_PATH = "my_profile.tcss"
 
@@ -80,8 +81,7 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                     Static("Available Processes",id="process_options_label"),
                     OptionList(id="process_options"),
                     id="process_options_container"),
-                Button(
-                    "Select Process",
+                    Button("Select Process",
                     id="select_process_btn")))
         yield Footer()
 
@@ -102,7 +102,7 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                 try:
                     self.log(f"Template: {t}")
                     templates = self.query_one("#template_options", OptionList).add_option(
-                        Option(t.get("Catalog Template Name")))
+                        Option(t.get("displayName")))
                     self.log(f"Added option: {t.get('Catalog Template Name')}")
                     await templates.mount(after=self.query_one("#template_options_label"))
                     self.log(f"Mounted option")
@@ -112,7 +112,7 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                     try:
                         templates: OptionList = OptionList(id="template_options")
                         await templates.mount(after=self.query_one("#template_options_label"))
-                        templates.add_option(Option(t.get("Catalog Template Name")))
+                        templates.add_option(Option(t.get("displayName")))
                         templates.refresh()
                         self.query_one("#select_template_btn", Button).disabled = False
                         continue
@@ -122,6 +122,8 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                 except Exception as e:
                     self.log(f"Error creating template option list: {e} (411)")
                     return (411)
+                else:
+                    continue
         else:
             try:
                 self.log(f" No Templates")
@@ -147,14 +149,16 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                 try:
                     self.log(f"Process: {p}")
                     processes = self.query_one("#process_options", OptionList).add_option(
-                        Option(p.get("Governance Process Name")))
+                        Option(p.get("displayName")))
+                    self.log(f"Process option added: {p.get('displayName')}")
                     await processes.mount(after=self.query_one("#process_options_label"))
                     self.query_one("#select_process_btn", Button).disabled = False
+                    self.log(f"Enabled the process button")
                 except NoMatches as e:
                     try:
                         processes: OptionList = OptionList(id="process_options")
                         await processes.mount(after=self.query_one("#process_options_label"))
-                        processes.add_option(Option(p.get("Governance Process Name")))
+                        processes.add_option(Option(p.get("displayName")))
                         processes.refresh()
                         self.query_one("#select_process_btn", Button).disabled = False
                     except Exception as e:
@@ -163,6 +167,8 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                 except Exception as e:
                     self.log(f"Error creating process option list: {e}")
                     return (406)
+                else:
+                    continue
         else:
             try:
                 self.log(f" No Processes")
@@ -175,7 +181,6 @@ class TechnologyTypeOptionsScreen(ModalScreen):
                     processes: OptionList = OptionList(id="process_options")
                     await processes.mount(after=self.query_one("#process_options_label"))
                     processes.add_option(Option(" No Processes found for this Tech Type"))
-                    processes.refresh()
                     self.query_one("#select_process_btn", Button).disabled = True
                 except Exception as e:
                     self.log(f"Error creating process option list: {e}")
@@ -228,9 +233,13 @@ class TechnologyTypeOptionsScreen(ModalScreen):
         self.selected_process = selected_option.prompt
         self.log(f"Selected Option List: {self.option_type_selected}, template: {self.selected_process}, index: {self.selected_process_index}")
 
-    def action_back(self) -> None:
-        """Handle the back button press."""
+    def action_go_back(self) -> None:
+        """ Handle the back key press."""
         self.dismiss("back")
+
+    def action_Quit(self) -> None:
+        """ Handle the quit key press"""
+        self.dismiss(200)
 
     @on(Button.Pressed, "#select_template_btn")
     def handle_template_selected(self, event: Button.Pressed) -> None:

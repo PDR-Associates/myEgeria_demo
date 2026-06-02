@@ -18,6 +18,7 @@ from textual.widgets._tree import TreeNode
 class TechnologyTypesScreen(ModalScreen):
     """Modal screen to display technology types in Egeria."""
     BINDINGS = [("q", "dismiss(200)", "Quit"),
+                ("g", "go_back", "Back"),
                 ("ctl+e", "expand", "Toggle Twisties")]
 
     CSS_PATH = "my_profile.tcss"
@@ -71,15 +72,9 @@ class TechnologyTypesScreen(ModalScreen):
         """ The quit option in the footer has been selected. Dismiss the screen."""
         self.dismiss("200")
 
-    # @on(Button.Pressed, "#select_tech_type_btn")
-    # def handle_select_tech_type(self, event: Button.Pressed) -> str|None:
-    #     """ The select button on the screen has been pressed."""
-    #     self.log(f"Select button pressed, button: {event.button}")
-    #     if self.selected_t_node:
-    #         self.log(f"Selected node: {self.selected_t_node}, label: {self.selected_t_node.label}")
-    #         self.dismiss(str(self.selected_t_node.label))
-    #     else:
-    #         return "No technology type selected"
+    def action_go_back(self) -> None:
+        """ The back option in the footer has been selected. Dismiss the screen."""
+        self.dismiss("201")
 
     @on(Tree.NodeSelected)
     def handle_tree_node_selected(self, event: Tree.NodeSelected) -> None:
